@@ -1,0 +1,77 @@
+{
+    "Household": {
+        "household_id": "string",
+        "household_type": "string",
+        "members": [
+            "HouseholdAccountMember"
+        ]
+    },
+    "HouseholdAccountMember": {
+        "household_id": "string",
+        "account_id": "string",
+        "primary_account": "boolean"
+    },
+    "Customer": {
+        "customer_id": "string",
+        "customer_name": "string",
+        "customer_type": "string",
+        "accounts": [
+            "Account"
+        ]
+    },
+    "Account": {
+        "account_id": "string",
+        "account_type": "string",
+        "balance": "float",
+        "currency_code": "string",
+        "transactions": [
+            "Transaction"
+        ]
+    },
+    "Transaction": {
+        "transaction_id": "string",
+        "account_id": "string",
+        "transaction_type": "string",
+        "amount": "float",
+        "currency_code": "string",
+        "timestamp": "datetime"
+    },
+    "Watchlist": {
+        "watchlist_id": "string",
+        "customer_id": "string",
+        "watchlist_description": "string",
+        "public_private": "boolean"
+    },
+    "CustomerRelationship": {
+        "customer_id": "string",
+        "related_customer_id": "string",
+        "relationship_type": "string"
+    },
+    "CustomerAddress": {
+        "customer_id": "string",
+        "address": "string",
+        "city": "string",
+        "postal_code": "string",
+        "country_code": "string"
+    },
+    "AccountBalance": {
+        "account_id": "string",
+        "balance": "float",
+        "currency_code": "string",
+        "last_updated": "datetime"
+    },
+    "SettlementData": {
+        "settlement_id": "string",
+        "account_id": "string",
+        "settlement_type": "string",
+        "amount": "float",
+        "currency_code": "string",
+        "status": "string"
+    },
+    "ExchangeRate": {
+        "base_currency": "string",
+        "quote_currency": "string",
+        "exchange_rate": "float",
+        "timestamp": "datetime"
+    }
+}
