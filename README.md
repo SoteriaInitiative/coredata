@@ -53,6 +53,6 @@ Contributions are welcome! To get started:
 This project is licensed under the MIT License.
 Feel free to use, modify, and distribute this project as per the terms of the license.
 # Contact
-Project Maintainer: Soteria Initiative – @SoteriaInitiative – contact@soteria-initiative.com
+Project Maintainer: Soteria Initiative – @SoteriaInitiative – contact@soteria-initiative.org
 Repository: SoteriaInitiative/coredata
 For general inquiries or discussion, please open an issue.
