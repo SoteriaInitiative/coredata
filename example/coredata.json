@@ -1,77 +1,269 @@
 {
-    "Household": {
-        "household_id": "string",
-        "household_type": "string",
-        "members": [
-            "HouseholdAccountMember"
-        ]
-    },
-    "HouseholdAccountMember": {
-        "household_id": "string",
-        "account_id": "string",
-        "primary_account": "boolean"
-    },
-    "Customer": {
-        "customer_id": "string",
-        "customer_name": "string",
-        "customer_type": "string",
-        "accounts": [
-            "Account"
-        ]
-    },
-    "Account": {
-        "account_id": "string",
-        "account_type": "string",
-        "balance": "float",
-        "currency_code": "string",
-        "transactions": [
-            "Transaction"
-        ]
-    },
     "Transaction": {
-        "transaction_id": "string",
-        "account_id": "string",
-        "transaction_type": "string",
-        "amount": "float",
-        "currency_code": "string",
-        "timestamp": "datetime"
-    },
-    "Watchlist": {
-        "watchlist_id": "string",
-        "customer_id": "string",
-        "watchlist_description": "string",
-        "public_private": "boolean"
-    },
-    "CustomerRelationship": {
-        "customer_id": "string",
-        "related_customer_id": "string",
-        "relationship_type": "string"
-    },
-    "CustomerAddress": {
-        "customer_id": "string",
-        "address": "string",
-        "city": "string",
-        "postal_code": "string",
-        "country_code": "string"
-    },
-    "AccountBalance": {
-        "account_id": "string",
-        "balance": "float",
-        "currency_code": "string",
-        "last_updated": "datetime"
-    },
-    "SettlementData": {
-        "settlement_id": "string",
-        "account_id": "string",
-        "settlement_type": "string",
-        "amount": "float",
-        "currency_code": "string",
-        "status": "string"
-    },
-    "ExchangeRate": {
-        "base_currency": "string",
-        "quote_currency": "string",
-        "exchange_rate": "float",
-        "timestamp": "datetime"
+        "transaction_id": "string: bank internal id (maybe omit?)",
+        "transaction_originator": "string: trader name, transaction captured by name",
+        "transaction_type": "string: 202, 104, ... (id per network spec)",
+        "transaction_network": "string: SWIFT, ACH, SEPA, CME, ...",
+        "transaction_unit_type": "string: currency, stock, ...",
+        "transaction_units": "decimal",
+        "currency_amount": "decimal",
+        "currency_code": "string: ISO three letter codes, ticker or ISIN",
+        "timestamp": "datetime: unix ms timestamp",
+        "settlement": {
+            "settlement_id": "string",
+            "settlement_type": "string: SWIFT, ...",
+            "amount": "decimal",
+            "currency_code": "string",
+            "status": "string"
+        },
+        "exchange_rate": {
+            "base_currency": "string",
+            "quote_currency": "string",
+            "exchange_rate": "decimal",
+            "timestamp": "datetime"
+        },
+        "account": {
+            "account_id": "string",
+            "bic": "string",
+            "swift": "string",
+            "iban": "string",
+            "account_type": "string: credit, debit, investment, trade, custody, merchant, EXTERNAL...",
+            "transaction_role": "string: sending, receiving, correspondent",
+            "balance_before": "decimal (NONE if EXTERNAL)",
+            "balance_after": "decimal (NONE if EXTERNAL)",
+            "country_code": "string",
+            "parties": [
+                {
+                "party_id": "string: bank internal id (maybe omit?)",
+                "as_of_date": "datetime: unix ms timestamp",
+                "party_type": "string: individual, entity",
+                "party_role": "string: POA, UBO, ...",
+                "personal_info": {
+                    "date_of_birth": "datetime",
+                    "place_of_birth": {
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    "names": [
+                        {
+                            "name_sequence": "string",
+                            "name": "string"
+                        },
+                        {
+                            "name_sequence": "string",
+                            "name": "string"
+                        }
+                    ],
+                    "titles": [
+                        {
+                            "title_sequence": "string",
+                            "title": "string"
+                        },
+                        {
+                            "title_sequence": "string",
+                            "title": "string"
+                        }
+                    ]
+                },
+                "aliases": [
+                    {
+                        "alias_sequence": "1",
+                        "alias_type": "strong",
+                        "alias": "string"
+                    },
+                    {
+                        "alias_sequence": "2",
+                        "alias_type": "weak",
+                        "alias": "string"
+                    }
+                ],
+                "government_id": [
+                    {
+                        "country_name": "string",
+                        "document_type": "string: tin, passport, vat, drivers_license, ...",
+                        "document_number": "string",
+                        "issuing_country_code": "string"
+                    }
+                    ],
+                "addresses": [
+                    {
+                        "address_type": "residential",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    {
+                        "address_type": "correspondent",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    {
+                        "address_type": "other",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    }
+                ],
+                "relationships": [
+                    {
+                        "related_party_government_id": "string_government_id.document_number",
+                        "relationship_type": "string: parent, sibling, business partner, 50pct_owned, 100pct_owned"
+                    },
+                                        {
+                        "related_party_government_id": "string_government_id.document_number",
+                        "relationship_type": "string: parent, sibling, business partner, 50pct_owned, 100pct_owned"
+                    }
+                ],
+                "email": [
+                    {
+                        "email_sequence": "1",
+                        "email_type": "private",
+                        "email": "string"
+                    },
+                    {
+                        "email_sequence": "2",
+                        "email_type": "business",
+                        "email": "string"
+                    }
+                ],
+                "phone": [
+                    {
+                        "phone_sequence": "1",
+                        "phone_type": "fixed",
+                        "number": "string"
+                    },
+                    {
+                        "phone_sequence": "2",
+                        "phone_type": "mobile",
+                        "number": "string"
+                    }
+                ]
+                },
+                {
+                "party_id": "string: bank internal id (maybe omit?)",
+                "as_of_date": "datetime: unix ms timestamp",
+                "party_type": "string: individual, entity",
+                "party_role": "string: POA, UBO, ...",
+                "personal_info": {
+                    "date_of_birth": "datetime",
+                    "place_of_birth": {
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    "names": [
+                        {
+                            "name_sequence": "string",
+                            "name": "string"
+                        },
+                        {
+                            "name_sequence": "string",
+                            "name": "string"
+                        }
+                    ],
+                    "titles": [
+                        {
+                            "title_sequence": "string",
+                            "title": "string"
+                        },
+                        {
+                            "title_sequence": "string",
+                            "title": "string"
+                        }
+                    ]
+                },
+                "aliases": [
+                    {
+                        "alias_sequence": "1",
+                        "alias_type": "strong",
+                        "alias": "string"
+                    },
+                    {
+                        "alias_sequence": "2",
+                        "alias_type": "weak",
+                        "alias": "string"
+                    }
+                ],
+                "government_id": [
+                    {
+                        "country_name": "string",
+                        "document_type": "string: tin, passport, vat, drivers_license, ...",
+                        "document_number": "string",
+                        "issuing_country_code": "string"
+                    }
+                    ],
+                "addresses": [
+                    {
+                        "address_type": "residential",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    {
+                        "address_type": "correspondent",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    },
+                    {
+                        "address_type": "other",
+                        "address": "string",
+                        "city": "string",
+                        "zip": "string",
+                        "state": "string",
+                        "country_code": "string"
+                    }
+                ],
+                "relationships": [
+                    {
+                        "related_party_goverment_id": "string_government_id.document_number",
+                        "relationship_type": "string: parent, sibling, business partner, 50pct_owned, 100pct_owned"
+                    },
+                                        {
+                        "related_party_goverment_id": "string_government_id.document_number",
+                        "relationship_type": "string: parent, sibling, business partner, 50pct_owned, 100pct_owned"
+                    }
+                ],
+                "email": [
+                    {
+                        "email_sequence": "1",
+                        "email_type": "private",
+                        "email": "string"
+                    },
+                    {
+                        "email_sequence": "2",
+                        "email_type": "business",
+                        "email": "string"
+                    }
+                ],
+                "phone": [
+                    {
+                        "phone_sequence": "1",
+                        "phone_type": "fixed",
+                        "number": "string"
+                    },
+                    {
+                        "phone_sequence": "2",
+                        "phone_type": "mobile",
+                        "number": "string"
+                    }
+                ]
+                }
+            ]
+        }
     }
 }
