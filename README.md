@@ -18,18 +18,28 @@ implementation of a data editor will allow the encoding of actual financial crim
 
 # Getting Started
 1. Clone the repo
-```
+```zsh
 git clone https://github.com/SoteriaInitiative/coredata.git
 cd coredata
 ```
 2. Install the required dependencies
+```zsh
+pip install -r requirements.txt
 ```
-pip install requirements.txt
-```
-3. Run the generator and then explore the ```example.json``` file
-```
+3. Provide application configuration and create a service account on GCP and add a JSON key with edit permissions.
+4. Set the Google Cloud parameters
+5. Run synthetic data generator and review results
+```zsh
 python generator.py
 ```
+<details>
+    <summary>💡Hint how to read the data:</summary>
+
+Observe that each bank detections only a small set of transactiosn (red) but the vast majority
+of illicit transactions is not detected (yellow) because these are not part of the local knowledge/scenario pool.
+
+</details>
+
 # Project Structure
 To find your way around please find a quick overview of the project structure.
 ```
@@ -37,7 +47,8 @@ coredata/
 ├── documentation/              # Standard design documentation
 ├── example/                    # Example dataset implementing the standard
 ├── implementation/             # Example data generator and pattern editor
-├── standard                    # Standard specification
+├── gcp-credentials/            # Credentials for Google Cloud (you may need to create the folder)
+├── standard/                   # Standard specification
 ├── README.md                   # This file
 └── LICENSE                     # License file
 ```

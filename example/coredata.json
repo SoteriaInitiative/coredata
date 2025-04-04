@@ -22,6 +22,7 @@
             "exchange_rate": "decimal",
             "timestamp": "datetime"
         },
+        /*account needs to be an arry to accomodate multiple account roles*/
         "account": {
             "account_id": "string",
             "bic": "string",
