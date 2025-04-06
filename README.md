@@ -27,24 +27,42 @@ cd coredata
 pip install -r requirements.txt
 ```
 3. Provide application configuration and create a service account on GCP and add a JSON key with edit permissions.
-4. Set the Google Cloud parameters
-5. Run synthetic data generator and review results
-```zsh
-python generator.py
+Safe the key to ``implementation/gcp-credentials/gcp-key.json`` - create the gcp-credentials folder if you don't have it.
+Next, provide the proper application configurations. 
+Create a ``.env`` file in the implementation root ``coredata/implementation/`` with
+the following content:
+```text
+NUM_ROUNDS=1
+GCS_BUCKET_NAME=soteria-core-data
+GOOGLE_APPLICATION_CREDENTIALS=implementation/gcp-credentials/gcp-key.json
 ```
-<details>
-    <summary>💡Hint how to read the data:</summary>
+4. Set the Google Cloud parameters
+```zsh
+gcloud auth login
+gcloud config set project <PROJECT_ID>
+```
+Now create the storage bucket and replace `us-central1` with your desired location:
+```zsh
+gcloud storage buckets create gs://soteria-core-data \
+    --location=us-central1 \
+    --default-storage-class=STANDARD
 
-Observe that each bank detections only a small set of transactiosn (red) but the vast majority
-of illicit transactions is not detected (yellow) because these are not part of the local knowledge/scenario pool.
-
-</details>
+```
+5. Run synthetic data generator:
+```zsh
+python implementation/generator.py
+```
+To review the raw data for ``Bank_1`` on a terminal run:
+```zsh
+gsutil cp gs://soteria-core-data/Bank_1_transactions.json .
+cat Bank_1_transactions.json | jq . | more
+```
 
 # Project Structure
 To find your way around please find a quick overview of the project structure.
 ```
 coredata/
-├── documentation/              # Standard design documentation
+├── documentation/              # Use cases & design documentation
 ├── example/                    # Example dataset implementing the standard
 ├── implementation/             # Example data generator and pattern editor
 ├── gcp-credentials/            # Credentials for Google Cloud (you may need to create the folder)
