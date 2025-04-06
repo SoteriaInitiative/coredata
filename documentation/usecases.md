@@ -50,6 +50,7 @@ client types, industry codes or corporate identifiers (TIN vs LEI) in addition t
 (full name vs first, middle and last names). Editing a JSON file directly may be possible for a technically versed
 financial professional but more accessible is a tools to describe entities and transactions that allows the export of the
 pattern for sharing with the financial crime community. 
+
 <b>Alternative Scenario:</b> Rather than creating example data in an editor, the financial crime professional
 will run an editor tool on actual data and extract the patterns automatically for review in a visual tool before
 it is shared with the financial crime community.

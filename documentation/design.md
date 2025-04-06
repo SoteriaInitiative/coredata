@@ -53,3 +53,33 @@ and mitigation options (segregated models by transaction role types)
 Justification: + pragmatic - might have adverse effect as same account info would look different in different FL nodes
 
 Alternatives considered: Object relational; +efficient bur -complex to adapt
+
+## Categorical Data Encoding
+Categorical data can be modeled either as an attribute for each category or as a value type. Since modeling
+as an attribute requires data standard changes value type modeling is preferred here.
+
+Decision (Tentative): Categories will be encoded as value types with yet to be defined type standards for each value type.
+
+Justification: + change resistant + avoids sparse/empty columns - processing for machine learning might need standardization
+
+Alternatives considered: attribute encoding; - hard to read, - many null columns
+
+## Risk Based Data Attribute Collection
+The data standard requires the same set of data attributes, independent of the risk classification of the entity. While
+that may require additional data elements that may not be needed at present, there is no guarantee such data may not be
+required at a future point in time. Additionally, for the purpose of machine learning across institutions, there
+is a high probability not every institution rates teh same entity at same risk level.
+
+While there is value in performing customer/transaction reviews with a risk-base perspective, collecting the data is 
+not an recommended approach. What is unavailable is that certain functions/roles to an account or an entity may not
+legally be required to disclose specific details (e.g., US company directors), in such cases the commissions must be 
+treated consistently.
+
+
+Decision (Tentative): Same set of data attributes for all risk classes of parties, consistent omissions of attributes 
+for specific type of roles/functions only.
+
+Justification: + aids machine learning + ensure data availability in case of risk class change - challanging for certain roles/functions
+
+Alternatives considered: optional attributes; - arbitrary data imbalance reduces AI benefits
+

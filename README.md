@@ -11,7 +11,7 @@ need the standards so that they can rely on homogeneous input data for training 
 The standards are a minimum set of data elements for the objective but build on
 existing more comprehensive definitions such as:
 - [Financial Market Standard Body Customer Onboarding Standard](https://fmsb.com/wp-content/uploads/2024/12/20241217_Standard-for-COB_FINAL.pdf)
-- [SWIFT ISO 20022 Messaging Standard](https://www2.swift.com/knowledgecentre/publications/iso_20022_fnc_instit_get_st/4.0?topic=technical-implementation.htm) (free account required)
+- [SWIFT ISO 20022 Messaging Standard](https://www2.swift.com/knowledgecentre/products/Standards%20MX/publications?protected=true&reload-date=1743955486276) (free account required)
 
 To make the standards useful synthetic data generators will be provided and a reference
 implementation of a data editor will allow the encoding of actual financial crime patterns.
