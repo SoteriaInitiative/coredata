@@ -1,7 +1,7 @@
 # About the Project
 The Core Data standard is part of the [Soteria Initiative](https://soteria-initiative.org/) to establish common financial
 crime data standards and includes the customer and entity data elements, collectively 
-party data records, as well as transaction record standards.
+party data records, as well as transaction record standards. For a technical overview consult the [technical documentation](https://deepwiki.com/SoteriaInitiative/coredata) - auto generation courtesy of DeepWiki.
 
 As per the current release 95% of core standards are covered exemplified below:
 
