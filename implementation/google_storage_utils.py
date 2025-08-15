@@ -1,8 +1,10 @@
-from google.cloud import storage
 import os
 from dotenv import load_dotenv
 import json
 import logging
+
+from google.cloud import storage
+from google.oauth2 import service_account
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -16,22 +18,37 @@ class GoogleStorageUtils:
         # Google Cloud Storage bucket name
         self.BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "soteria-federated-learning")
         # Path to service account key file (if using service account auth)
-        self.SERVICE_ACCOUNT_KEY = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        # self.SERVICE_ACCOUNT_KEY = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         self._storage_client = None
+
+        # Construct credentials from individual environment variables
+        print("Constructing credentials from environment variables.")
+        service_account_info = {
+            "type": "service_account",
+            "project_id": os.getenv("GCP_PROJECT_ID"),
+            "private_key_id": os.getenv("GCP_PRIVATE_KEY_ID"),
+            "private_key": os.getenv("GCP_PRIVATE_KEY").replace('\\n', '\n'),  # IMPORTANT: handle newlines
+            "client_email": os.getenv("GCP_CLIENT_EMAIL"),
+            "client_id": os.getenv("GCP_CLIENT_ID"),
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/fedmlservcieaccount%40eastern-kit-455209-b3.iam.gserviceaccount.com",
+            "universe_domain": "googleapis.com"
+        }
+        # Create a Credentials object from the dictionary
+        try:
+            credentials = service_account.Credentials.from_service_account_info(service_account_info)
+            self._storage_client = storage.Client(credentials=credentials)
+        except Exception as e:
+            print(f"Failed to create Google Cloud Storage client: {e}")
 
     @property
     def storage_client(self):
         """Lazy initialization of Google Cloud Storage client"""
-        if self._storage_client is None:
-            if self.SERVICE_ACCOUNT_KEY:
-                # Initialize with service account credentials
-                self._storage_client = storage.Client.from_service_account_json(
-                    self.SERVICE_ACCOUNT_KEY
-                )
-            else:
-                # Initialize with default credentials
-                self._storage_client = storage.Client()
-            logger.info("Google Cloud Storage client initialized")
+        return self._storage_client
+
+    def get_storage_client(self):
         return self._storage_client
 
     def upload_json_data(self, data, file_name):
