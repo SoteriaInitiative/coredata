@@ -151,3 +151,4 @@ Feel free to use, modify, and distribute this project as per the terms of the li
 Project Maintainer: Soteria Initiative – @SoteriaInitiative – contact@soteria-initiative.org
 Repository: SoteriaInitiative/coredata
 For general inquiries or discussion, please open an issue.
+
