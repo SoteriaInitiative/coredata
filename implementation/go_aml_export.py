@@ -27,14 +27,23 @@ def filter_sar_transactions(transactions):
     return [t for t in transactions if t.get('Transaction', {}).get('local_label') == 1]
 
 
-def group_by_party(transactions):
-    """Group transactions by (party_id, as_of_date)."""
-    grouped = defaultdict(list)
-    for tx in transactions:
-        account = tx['Transaction'].get('account', {})
-        for party in account.get('parties', []):
-            key = (party['party_id'], party['as_of_date'])
-            grouped[key].append(tx)
+def group_by_party(sar_transactions, all_transactions):
+    """Group SAR transactions by originator and day and include all matching transactions."""
+
+    index = defaultdict(list)
+    for tx in all_transactions:
+        tdata = tx['Transaction']
+        originator = tdata.get('transaction_originator')
+        day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
+        index[(originator, day)].append(tx)
+
+    grouped = {}
+    for tx in sar_transactions:
+        tdata = tx['Transaction']
+        originator = tdata.get('transaction_originator')
+        day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
+        grouped[(originator, day)] = index[(originator, day)]
+
     return grouped
 
 
@@ -46,14 +55,14 @@ TYPE_MAP = {
 }
 
 
-def build_report(party_id, as_of_date, transactions):
-    """Build the goAML XML report for a party and its transactions."""
+def build_report(originator, day, transactions):
+    """Build the goAML XML report for an originator and its transactions."""
     now_iso = datetime.utcnow().isoformat()
     report = etree.Element('report')
     etree.SubElement(report, 'rentity_id').text = '1'
     etree.SubElement(report, 'submission_code').text = 'E'
     etree.SubElement(report, 'report_code').text = 'SAR'
-    etree.SubElement(report, 'entity_reference').text = f'{party_id}-{as_of_date}'
+    etree.SubElement(report, 'entity_reference').text = f'{originator}-{day}'
     etree.SubElement(report, 'report_date').text = now_iso
     etree.SubElement(report, 'currency_code_local').text = 'CHF'
 
@@ -65,7 +74,7 @@ def build_report(party_id, as_of_date, transactions):
     etree.SubElement(location, 'country_code').text = 'CH'
     etree.SubElement(location, 'state').text = 'ZH'
 
-    etree.SubElement(report, 'reason').text = f'Suspicious activity for {party_id}'
+    etree.SubElement(report, 'reason').text = f'Suspicious activity for {originator}'
     etree.SubElement(report, 'action').text = 'Transaction reported to authorities'
 
     for tx in transactions:
@@ -86,7 +95,7 @@ def build_report(party_id, as_of_date, transactions):
         etree.SubElement(party_el, 'role').text = '1'
         person = etree.SubElement(party_el, 'person')
         etree.SubElement(person, 'first_name').text = 'Unknown'
-        etree.SubElement(person, 'last_name').text = party_id
+        etree.SubElement(person, 'last_name').text = originator
         etree.SubElement(party_el, 'comments').text = 'Acted as intermediary'
 
     report_indicators = etree.SubElement(report, 'report_indicators')
@@ -136,18 +145,18 @@ def export_to_goaml(json_path):
     """Convert transaction data to goAML XML and upload to GCS."""
     transactions = load_transactions(json_path)
     sar_transactions = filter_sar_transactions(transactions)
-    grouped = group_by_party(sar_transactions)
+    grouped = group_by_party(sar_transactions, transactions)
 
     bank_id = os.path.splitext(os.path.basename(json_path))[0]
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     folder = f'{timestamp}'
 
-    for (party_id, as_of), txs in grouped.items():
-        report = build_report(party_id, as_of, txs)
+    for (originator, day), txs in grouped.items():
+        report = build_report(originator, day, txs)
         validate_report(report)
         verify_content(txs, report)
         xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)
-        filename = f'{bank_id}_{party_id}_{as_of}_{timestamp}.xml'
+        filename = f'{bank_id}_{originator}_{day}_{timestamp}.xml'
         gcs_path = f'{folder}/{filename}'
         upload_report(xml_bytes, gcs_path)
 
