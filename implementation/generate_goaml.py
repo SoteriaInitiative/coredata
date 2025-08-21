@@ -34,24 +34,24 @@ ACCOUNT_TYPE_MAP = {
 fake = Faker()
 
 
-def _build_address(parent):
+def _build_address(parent, address):
     addr = etree.SubElement(parent, 'address')
     etree.SubElement(addr, 'address_type').text = '1'
-    etree.SubElement(addr, 'address').text = fake.street_address()
-    etree.SubElement(addr, 'city').text = fake.city()
-    etree.SubElement(addr, 'country_code').text = 'CH'
-    etree.SubElement(addr, 'state').text = 'ZH'
+    etree.SubElement(addr, 'address').text = address['address']
+    etree.SubElement(addr, 'city').text = address['city']
+    etree.SubElement(addr, 'country_code').text = address['country_code']
+    etree.SubElement(addr, 'state').text = address['state']
     return addr
 
 
-def _build_person(parent, first_name, last_name):
+def _build_person(parent, first_name, last_name, address):
     etree.SubElement(parent, 'gender').text = 'U'
     etree.SubElement(parent, 'first_name').text = first_name
     etree.SubElement(parent, 'last_name').text = last_name
     etree.SubElement(parent, 'birthdate').text = '1900-01-01T00:00:00'
     etree.SubElement(parent, 'nationality1').text = 'CH'
     addresses = etree.SubElement(parent, 'addresses')
-    _build_address(addresses)
+    _build_address(addresses, address)
 
 
 def _build_account(parent, account, currency_code_local, day, tag):
@@ -69,7 +69,8 @@ def _build_account(parent, account, currency_code_local, day, tag):
     related = etree.SubElement(acc_el, 'related_persons')
     arp = etree.SubElement(related, 'account_related_person')
     tp = etree.SubElement(arp, 't_person')
-    _build_person(tp, account.get('first_name', 'Unknown'), account.get('last_name', 'Unknown'))
+    addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+    _build_person(tp, account.get('first_name', 'Unknown'), account.get('last_name', 'Unknown'), addr)
     etree.SubElement(arp, 'role').text = '1'
     rr = etree.SubElement(arp, 'relation_date_range')
     etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
@@ -129,7 +130,8 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
         etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
         to_person = etree.SubElement(t_to, 'to_person')
-        _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'), 'Unknown')
+        addr = tdata.get('account', {}).get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'), 'Unknown', addr)
         etree.SubElement(t_to, 'to_country').text = tdata.get('transaction_beneficiary_country_code', 'CH')
 
         comments = etree.SubElement(tx_el, 'comments')
@@ -190,14 +192,23 @@ def group_by_party(sar_transactions, all_transactions):
 
 
 def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distribution):
+    fake.unique.clear()
     parties = []
     accounts = {b: {} for b in range(1, banks + 1)}
+    multi_bank_count = 0
     for i in range(num_parties):
         pid = f'P{i+1}'
         first, last = fake.first_name(), fake.last_name()
-        party_info = {'id': pid, 'first_name': first, 'last_name': last}
+        address = {
+            'address': fake.street_address(),
+            'city': fake.city(),
+            'country_code': 'CH',
+            'state': 'ZH',
+        }
+        party_info = {'id': pid, 'first_name': first, 'last_name': last, 'address': address}
         parties.append(party_info)
         if random.random() < multi_bank_prob:
+            multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
             bank_ids = random.sample(range(1, banks + 1), n_banks)
         else:
@@ -205,22 +216,30 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
         for b in bank_ids:
             acc = {
                 'bank_name': f'Bank_{b}',
-                'account_id': f'A{b}{i+1}',
+                'account_id': fake.unique.bban(),
                 'bic': f'BIC{b}{i+1}',
-                'iban': f'IBAN{b}{i+1}',
+                'iban': f"CH{fake.unique.random_number(digits=19)}",
                 'account_type': random.choice(['current', 'business']),
                 'first_name': first,
                 'last_name': last,
-                'balance_after': round(random.uniform(1000, 5000), 2),
+                'address': address,
+                'balance_after': 0.0,
                 'country_code': 'CH',
             }
             accounts[b][pid] = acc
-    return parties, accounts
+    return parties, accounts, multi_bank_count
 
 
 def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_back, scenario_prob, bank_knows,
                                    std_multiplier, max_splits):
     transactions = []
+    stats = {
+        'scenario': 0,
+        'non_scenario': 0,
+        'spacing': {'uniform': 0, 'scattered': 0},
+        'distribution': {'uniform': 0, 'skewed': 0},
+        'labels': {'local1_global1': 0, 'local0_global1': 0, 'local0_global0': 0},
+    }
     now = datetime.utcnow()
     base_mean = 1000
     base_std = 200
@@ -255,13 +274,20 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
                         'currency_code': 'CHF',
                         'timestamp': int(ts.timestamp() * 1000),
                         'account': account,
-                        'transaction_beneficiary': accounts[party_id]['first_name'],
+                        'transaction_beneficiary': account['first_name'],
                         'transaction_beneficiary_country_code': 'CH',
                         'local_label': 1 if bank_knows else 0,
                         'global_label': 1,
                     }
                 }
                 transactions.append(tdict)
+                stats['scenario'] += 1
+                stats['spacing'][spacing] += 1
+                stats['distribution'][distribution] += 1
+                if bank_knows:
+                    stats['labels']['local1_global1'] += 1
+                else:
+                    stats['labels']['local0_global1'] += 1
                 tx_id += 1
                 if len(transactions) >= num_transactions:
                     break
@@ -278,19 +304,36 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
                     'currency_code': 'CHF',
                     'timestamp': int(ts.timestamp() * 1000),
                     'account': account,
-                    'transaction_beneficiary': accounts[party_id]['first_name'],
+                    'transaction_beneficiary': account['first_name'],
                     'transaction_beneficiary_country_code': 'CH',
                     'local_label': 0,
                     'global_label': 0,
                 }
             }
             transactions.append(tdict)
+            stats['non_scenario'] += 1
+            stats['labels']['local0_global0'] += 1
             tx_id += 1
-    return transactions
+    sums = defaultdict(float)
+    for tx in transactions:
+        acc = tx['Transaction']['account']
+        sums[acc['account_id']] += tx['Transaction']['currency_amount']
+    for acc in accounts.values():
+        acc['balance_after'] = round(sums.get(acc['account_id'], 0.0), 2)
+    return transactions, stats
 
 
 def generate_reports(args):
-    parties, all_accounts = generate_parties(args.parties, args.banks, args.multi_bank_prob, args.multi_bank_distribution)
+    parties, all_accounts, multi_bank_count = generate_parties(
+        args.parties, args.banks, args.multi_bank_prob, args.multi_bank_distribution
+    )
+    global_stats = {
+        'scenario': 0,
+        'non_scenario': 0,
+        'spacing': {'uniform': 0, 'scattered': 0},
+        'distribution': {'uniform': 0, 'skewed': 0},
+        'labels': {'local1_global1': 0, 'local0_global1': 0, 'local0_global0': 0},
+    }
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     folder = timestamp
     for bank_id in range(1, args.banks + 1):
@@ -299,7 +342,7 @@ def generate_reports(args):
             continue
         scenario_prob = args.scenario_probability.get(str(bank_id), args.default_scenario_prob)
         bank_knows = args.bank_knowledge.get(str(bank_id), True)
-        txs = generate_transactions_for_bank(
+        txs, bank_stats = generate_transactions_for_bank(
             bank_id,
             accounts,
             args.transactions,
@@ -309,6 +352,14 @@ def generate_reports(args):
             args.std_multiplier,
             args.max_splits,
         )
+        for key in ['scenario', 'non_scenario']:
+            global_stats[key] += bank_stats[key]
+        for key in ['uniform', 'scattered']:
+            global_stats['spacing'][key] += bank_stats['spacing'][key]
+        for key in ['uniform', 'skewed']:
+            global_stats['distribution'][key] += bank_stats['distribution'][key]
+        for key in global_stats['labels']:
+            global_stats['labels'][key] += bank_stats['labels'][key]
         sar_transactions = [t for t in txs if t['Transaction']['local_label'] == 1]
         grouped = group_by_party(sar_transactions, txs)
         for (originator, day), group in grouped.items():
@@ -321,6 +372,13 @@ def generate_reports(args):
                 filename = f'Bank_{bank_id}_LargeCashDeposit_{originator}_{day}_{timestamp}_{i//1000 + 1}.xml'
                 path = f'{folder}/{filename}'
                 upload_report(xml_bytes, path)
+    print('--- Generation Statistics ---')
+    print(f"Scenario transactions: {global_stats['scenario']}")
+    print(f"Non-scenario transactions: {global_stats['non_scenario']}")
+    print(f"Multi-bank parties: {multi_bank_count}")
+    print(f"Spacing: {global_stats['spacing']}")
+    print(f"Amount distribution: {global_stats['distribution']}")
+    print(f"Labels: {global_stats['labels']}")
 
 
 def main():
