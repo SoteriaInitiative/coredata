@@ -52,6 +52,7 @@ def group_by_party(sar_transactions, all_transactions):
 
 TYPE_MAP = {
     'CASH': 'CASHT',
+    'DEPOSIT': 'CASHT',
     'SWIFT': 'B2BWT',
     '202': 'B2BWT',
     'SEPA': 'B2BWT',
@@ -96,7 +97,7 @@ def _build_person(parent, first_name):
 def _build_account(parent, account, currency_code_local, day, tag):
     """Create a t_account_my_client element with required dummy values."""
     acc_el = etree.SubElement(parent, tag)
-    etree.SubElement(acc_el, 'institution_name').text = 'Dummy Bank'
+    etree.SubElement(acc_el, 'institution_name').text = account.get('bank_name', 'Dummy Bank')
     etree.SubElement(acc_el, 'swift').text = account.get('bic', 'DUMMYBIC')
     # institution_country is deprecated (maxOccurs=0) in schema 5.0
     etree.SubElement(acc_el, 'branch').text = 'ZH'
@@ -159,35 +160,67 @@ def build_report(originator, day, transactions, currency_code_local):
 
         funds_code = FUNDS_TYPE_MAP.get(tdata.get('transaction_unit_type', ''), '27')
         t_from = etree.SubElement(tx_el, 't_from_my_client')
-        etree.SubElement(t_from, 'from_funds_code').text = funds_code
-        ffc = etree.SubElement(t_from, 'from_foreign_currency')
-        etree.SubElement(ffc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
-        etree.SubElement(ffc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
-        if tdata.get('exchange_rate'):
-            etree.SubElement(ffc, 'foreign_exchange_rate').text = str(
-                tdata['exchange_rate'].get('exchange_rate', 1)
-            )
-        _build_account(t_from, tdata.get('account', {}), currency_code_local, date_str, 'from_account')
-        from_country = tdata.get('account', {}).get('country_code', 'CH')
-        if from_country == 'UK':
-            from_country = 'GB'
-        etree.SubElement(t_from, 'from_country').text = from_country
+        if tx_code == 'CASHT' and funds_code == FUNDS_TYPE_MAP.get('cash'):
+            etree.SubElement(t_from, 'from_funds_code').text = FUNDS_TYPE_MAP['cash']
+            ffc = etree.SubElement(t_from, 'from_foreign_currency')
+            etree.SubElement(ffc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
+            etree.SubElement(ffc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
+            if tdata.get('exchange_rate'):
+                etree.SubElement(ffc, 'foreign_exchange_rate').text = str(
+                    tdata['exchange_rate'].get('exchange_rate', 1)
+                )
+            fp = etree.SubElement(t_from, 'from_person')
+            tp = etree.SubElement(fp, 't_person')
+            _build_person(tp, tdata.get('transaction_originator', 'Unknown'))
+            from_country = tdata.get('account', {}).get('country_code', 'CH')
+            if from_country == 'UK':
+                from_country = 'GB'
+            etree.SubElement(t_from, 'from_country').text = from_country
 
-        t_to = etree.SubElement(tx_el, 't_to_my_client')
-        etree.SubElement(t_to, 'to_funds_code').text = funds_code
-        tfc = etree.SubElement(t_to, 'to_foreign_currency')
-        etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
-        etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
-        if tdata.get('exchange_rate'):
-            etree.SubElement(tfc, 'foreign_exchange_rate').text = str(
-                tdata['exchange_rate'].get('exchange_rate', 1)
-            )
-        to_person = etree.SubElement(t_to, 'to_person')
-        _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'))
-        to_country = tdata.get('transaction_beneficiary_country_code', 'CH')
-        if to_country == 'UK':
-            to_country = 'GB'
-        etree.SubElement(t_to, 'to_country').text = to_country
+            t_to = etree.SubElement(tx_el, 't_to_my_client')
+            etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['currency']
+            tfc = etree.SubElement(t_to, 'to_foreign_currency')
+            etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
+            etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
+            if tdata.get('exchange_rate'):
+                etree.SubElement(tfc, 'foreign_exchange_rate').text = str(
+                    tdata['exchange_rate'].get('exchange_rate', 1)
+                )
+            _build_account(t_to, tdata.get('account', {}), currency_code_local, date_str, 'to_account')
+            to_country = tdata.get('account', {}).get('country_code', 'CH')
+            if to_country == 'UK':
+                to_country = 'GB'
+            etree.SubElement(t_to, 'to_country').text = to_country
+        else:
+            etree.SubElement(t_from, 'from_funds_code').text = funds_code
+            ffc = etree.SubElement(t_from, 'from_foreign_currency')
+            etree.SubElement(ffc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
+            etree.SubElement(ffc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
+            if tdata.get('exchange_rate'):
+                etree.SubElement(ffc, 'foreign_exchange_rate').text = str(
+                    tdata['exchange_rate'].get('exchange_rate', 1)
+                )
+            _build_account(t_from, tdata.get('account', {}), currency_code_local, date_str, 'from_account')
+            from_country = tdata.get('account', {}).get('country_code', 'CH')
+            if from_country == 'UK':
+                from_country = 'GB'
+            etree.SubElement(t_from, 'from_country').text = from_country
+
+            t_to = etree.SubElement(tx_el, 't_to_my_client')
+            etree.SubElement(t_to, 'to_funds_code').text = funds_code
+            tfc = etree.SubElement(t_to, 'to_foreign_currency')
+            etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
+            etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
+            if tdata.get('exchange_rate'):
+                etree.SubElement(tfc, 'foreign_exchange_rate').text = str(
+                    tdata['exchange_rate'].get('exchange_rate', 1)
+                )
+            to_person = etree.SubElement(t_to, 'to_person')
+            _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'))
+            to_country = tdata.get('transaction_beneficiary_country_code', 'CH')
+            if to_country == 'UK':
+                to_country = 'GB'
+            etree.SubElement(t_to, 'to_country').text = to_country
 
         comments = etree.SubElement(tx_el, 'comments')
         comments.text = (
