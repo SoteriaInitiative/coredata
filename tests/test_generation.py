@@ -1,0 +1,59 @@
+import os
+import sys
+import random
+from collections import defaultdict
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from implementation import generate_goaml
+
+
+def setup_module(module):
+    random.seed(0)
+    generate_goaml.fake.seed_instance(0)
+
+
+def _generate_sample():
+    parties, receivers, accounts_by_bank, _ = generate_goaml.generate_parties(
+        num_parties=10, banks=2, multi_bank_prob=0.5, multi_bank_distribution=2
+    )
+    return parties, receivers, accounts_by_bank
+
+
+def test_iban_uniqueness():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    ibans = []
+    for bank_accounts in accounts_by_bank.values():
+        for acc in bank_accounts.values():
+            ibans.append(acc['iban'])
+    assert len(ibans) == len(set(ibans))
+
+
+def test_address_consistency():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    for p in parties:
+        pid = p['id']
+        addr = p['address']
+        assert receivers[pid]['address'] == addr
+        for bank_accounts in accounts_by_bank.values():
+            if pid in bank_accounts:
+                assert bank_accounts[pid]['address'] == addr
+
+
+def test_account_balance_and_receiver_address():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, stats = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, num_transactions=50, days_back=30,
+        scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
+    )
+    sums = defaultdict(float)
+    for tx in txs:
+        tdata = tx['Transaction']
+        acc = tdata['account']
+        sums[acc['account_id']] += tdata['currency_amount']
+        ben = tdata['beneficiary']
+        assert ben['address'] == acc['address']
+        assert ben['last_name'] == 'Unknown'
+        
+    for acc in accounts.values():
+        assert acc['balance_after'] == round(sums.get(acc['account_id'], 0.0), 2)

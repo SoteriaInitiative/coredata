@@ -8,7 +8,10 @@ from faker import Faker
 from lxml import etree
 import xmlschema
 
-from google_storage_utils import gs_utils
+try:
+    from .google_storage_utils import gs_utils
+except ImportError:  # pragma: no cover
+    from google_storage_utils import gs_utils
 
 # Constants and mappings
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '..', 'standard', 'XML_Schema.xsd')
@@ -130,8 +133,9 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
         etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
         to_person = etree.SubElement(t_to, 'to_person')
-        addr = tdata.get('account', {}).get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-        _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'), 'Unknown', addr)
+        beneficiary = tdata.get('beneficiary', {})
+        addr = beneficiary.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        _build_person(to_person, beneficiary.get('first_name', 'Unknown'), beneficiary.get('last_name', 'Unknown'), addr)
         etree.SubElement(t_to, 'to_country').text = tdata.get('transaction_beneficiary_country_code', 'CH')
 
         comments = etree.SubElement(tx_el, 'comments')
@@ -194,6 +198,7 @@ def group_by_party(sar_transactions, all_transactions):
 def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distribution):
     fake.unique.clear()
     parties = []
+    receivers = {}
     accounts = {b: {} for b in range(1, banks + 1)}
     multi_bank_count = 0
     for i in range(num_parties):
@@ -207,6 +212,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
         }
         party_info = {'id': pid, 'first_name': first, 'last_name': last, 'address': address}
         parties.append(party_info)
+        receivers[pid] = {'first_name': first, 'last_name': 'Unknown', 'address': address}
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
@@ -227,10 +233,10 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'country_code': 'CH',
             }
             accounts[b][pid] = acc
-    return parties, accounts, multi_bank_count
+    return parties, receivers, accounts, multi_bank_count
 
 
-def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_back, scenario_prob, bank_knows,
+def generate_transactions_for_bank(bank_id, accounts, receivers, num_transactions, days_back, scenario_prob, bank_knows,
                                    std_multiplier, max_splits):
     transactions = []
     stats = {
@@ -248,6 +254,7 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
     while len(transactions) < num_transactions:
         party_id = random.choice(list(accounts.keys()))
         account = accounts[party_id]
+        beneficiary = receivers[party_id]
         if random.random() < scenario_prob:
             total_amount = threshold * random.uniform(1.0, 2.0)
             splits = random.randint(1, max_splits)
@@ -274,8 +281,9 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
                         'currency_code': 'CHF',
                         'timestamp': int(ts.timestamp() * 1000),
                         'account': account,
-                        'transaction_beneficiary': account['first_name'],
+                        'transaction_beneficiary': beneficiary['first_name'],
                         'transaction_beneficiary_country_code': 'CH',
+                        'beneficiary': beneficiary,
                         'local_label': 1 if bank_knows else 0,
                         'global_label': 1,
                     }
@@ -304,8 +312,9 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
                     'currency_code': 'CHF',
                     'timestamp': int(ts.timestamp() * 1000),
                     'account': account,
-                    'transaction_beneficiary': account['first_name'],
+                    'transaction_beneficiary': beneficiary['first_name'],
                     'transaction_beneficiary_country_code': 'CH',
+                    'beneficiary': beneficiary,
                     'local_label': 0,
                     'global_label': 0,
                 }
@@ -324,7 +333,7 @@ def generate_transactions_for_bank(bank_id, accounts, num_transactions, days_bac
 
 
 def generate_reports(args):
-    parties, all_accounts, multi_bank_count = generate_parties(
+    parties, receivers, all_accounts, multi_bank_count = generate_parties(
         args.parties, args.banks, args.multi_bank_prob, args.multi_bank_distribution
     )
     global_stats = {
@@ -345,6 +354,7 @@ def generate_reports(args):
         txs, bank_stats = generate_transactions_for_bank(
             bank_id,
             accounts,
+            receivers,
             args.transactions,
             args.days,
             scenario_prob,
