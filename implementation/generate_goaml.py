@@ -47,11 +47,11 @@ def _build_address(parent, address):
     return addr
 
 
-def _build_person(parent, first_name, last_name, address):
+def _build_person(parent, first_name, last_name, address, birthdate):
     etree.SubElement(parent, 'gender').text = 'U'
     etree.SubElement(parent, 'first_name').text = first_name
     etree.SubElement(parent, 'last_name').text = last_name
-    etree.SubElement(parent, 'birthdate').text = '1900-01-01T00:00:00'
+    etree.SubElement(parent, 'birthdate').text = birthdate
     etree.SubElement(parent, 'nationality1').text = 'CH'
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
@@ -73,7 +73,13 @@ def _build_account(parent, account, currency_code_local, day, tag):
     arp = etree.SubElement(related, 'account_related_person')
     tp = etree.SubElement(arp, 't_person')
     addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-    _build_person(tp, account.get('first_name', 'Unknown'), account.get('last_name', 'Unknown'), addr)
+    _build_person(
+        tp,
+        account.get('first_name', 'Unknown'),
+        account.get('last_name', 'Unknown'),
+        addr,
+        account.get('birthdate', '1900-01-01T00:00:00'),
+    )
     etree.SubElement(arp, 'role').text = '1'
     rr = etree.SubElement(arp, 'relation_date_range')
     etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
@@ -135,7 +141,13 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
         to_person = etree.SubElement(t_to, 'to_person')
         beneficiary = tdata.get('beneficiary', {})
         addr = beneficiary.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-        _build_person(to_person, beneficiary.get('first_name', 'Unknown'), beneficiary.get('last_name', 'Unknown'), addr)
+        _build_person(
+            to_person,
+            beneficiary.get('first_name', 'Unknown'),
+            beneficiary.get('last_name', 'Unknown'),
+            addr,
+            beneficiary.get('birthdate', '1900-01-01T00:00:00'),
+        )
         etree.SubElement(t_to, 'to_country').text = tdata.get('transaction_beneficiary_country_code', 'CH')
 
         comments = etree.SubElement(tx_el, 'comments')
@@ -204,15 +216,34 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
     for i in range(num_parties):
         pid = f'P{i+1}'
         first, last = fake.first_name(), fake.last_name()
+        birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
         address = {
             'address': fake.street_address(),
             'city': fake.city(),
             'country_code': 'CH',
             'state': 'ZH',
         }
-        party_info = {'id': pid, 'first_name': first, 'last_name': last, 'address': address}
+        party_info = {
+            'id': pid,
+            'first_name': first,
+            'last_name': last,
+            'birthdate': birthdate,
+            'address': address,
+        }
         parties.append(party_info)
-        receivers[pid] = {'first_name': first, 'last_name': 'Unknown', 'address': address}
+
+        recv_first = fake.first_name()
+        while recv_first == first:
+            recv_first = fake.first_name()
+        recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+        while recv_birth == birthdate:
+            recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+        receivers[pid] = {
+            'first_name': recv_first,
+            'last_name': 'Unknown',
+            'birthdate': recv_birth,
+            'address': address,
+        }
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
@@ -228,6 +259,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'account_type': random.choice(['current', 'business']),
                 'first_name': first,
                 'last_name': last,
+                'birthdate': birthdate,
                 'address': address,
                 'balance_after': 0.0,
                 'country_code': 'CH',
@@ -271,20 +303,22 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, num_transaction
             base_time = now - timedelta(days=random.randint(0, days_back))
             for idx in range(splits):
                 ts = base_time if spacing == 'uniform' else base_time + timedelta(minutes=random.randint(1, 120) * idx)
+                amount = round(amounts[idx], 2)
+                local_label = 1 if bank_knows and amount >= threshold else 0
                 tdict = {
                     'Transaction': {
                         'transaction_id': f'B{bank_id}T{tx_id}',
                         'transaction_originator': party_id,
                         'transaction_type': 'deposit',
                         'transaction_unit_type': 'cash',
-                        'currency_amount': round(amounts[idx], 2),
+                        'currency_amount': amount,
                         'currency_code': 'CHF',
                         'timestamp': int(ts.timestamp() * 1000),
                         'account': account,
                         'transaction_beneficiary': beneficiary['first_name'],
                         'transaction_beneficiary_country_code': 'CH',
                         'beneficiary': beneficiary,
-                        'local_label': 1 if bank_knows else 0,
+                        'local_label': local_label,
                         'global_label': 1,
                     }
                 }
@@ -292,7 +326,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, num_transaction
                 stats['scenario'] += 1
                 stats['spacing'][spacing] += 1
                 stats['distribution'][distribution] += 1
-                if bank_knows:
+                if local_label:
                     stats['labels']['local1_global1'] += 1
                 else:
                     stats['labels']['local0_global1'] += 1
