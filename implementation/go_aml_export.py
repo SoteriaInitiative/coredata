@@ -7,7 +7,10 @@ import logging
 from lxml import etree
 import xmlschema
 
-from google_storage_utils import gs_utils
+try:  # pragma: no cover - handled in tests
+    from .google_storage_utils import gs_utils
+except ImportError:  # pragma: no cover
+    from google_storage_utils import gs_utils
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
