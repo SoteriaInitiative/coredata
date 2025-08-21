@@ -96,6 +96,12 @@ To review the raw data for ``Bank_1`` on a terminal run:
 gsutil cp gs://soteria-core-data/Bank_1_transactions.json .
 cat Bank_1_transactions.json | jq . | more
 ```
+
+6. Explore the data with the query tool:
+```zsh
+python tools/goaml_query.py receivers
+python tools/goaml_query.py transactions "Jessica Hale" --bank "CH National"
+```
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
