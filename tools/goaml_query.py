@@ -14,6 +14,22 @@ The queries implemented are:
 4. Retrieve all receiving transactions for a party across all banks
 5. Retrieve all receiving transactions for a party for a specific bank
 
+For convenience many command line parameters can also be provided via
+environment variables:
+
+``GCS_BUCKET_NAME``
+    Name of the Google Cloud Storage bucket (defaults to ``soteria-core-data``).
+``SENDER_NAME``
+    Used by the ``receivers-for`` command when no positional argument is given.
+``RECEIVER_NAME``
+    Used by the ``senders-for`` command when no positional argument is given.
+``PARTY_NAME``
+    Used by the ``transactions`` command when no positional argument is given.
+``BANK``
+    Default bank identifier for the ``transactions`` command.
+``START_BALANCE``
+    Default starting balance for the ``transactions`` command.
+
 Run ``python tools/goaml_query.py --help`` for usage information.
 """
 
@@ -216,12 +232,16 @@ def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
 
 
 def _cmd_related(args: argparse.Namespace, role: str) -> None:
+    if not args.name:
+        raise SystemExit("A party name must be provided via argument or environment variable")
     txs = load_transactions()
     for party in related_parties(txs, args.name, role):
         print(json.dumps(party.__dict__, indent=2))
 
 
 def _cmd_transactions(args: argparse.Namespace) -> None:
+    if not args.name:
+        raise SystemExit("A party name must be provided via argument or environment variable")
     txs = load_transactions()
     records = receiving_transactions(
         txs,
@@ -253,20 +273,20 @@ def build_parser() -> argparse.ArgumentParser:
     receivers.set_defaults(func=lambda a: _cmd_unique_parties(a, "receiving"))
 
     rec_for = sub.add_parser("receivers-for", help="Receivers for a given sender")
-    rec_for.add_argument("name")
+    rec_for.add_argument("name", nargs="?", default=os.getenv("SENDER_NAME"))
     rec_for.set_defaults(func=lambda a: _cmd_related(a, "sending"))
 
     send_for = sub.add_parser("senders-for", help="Senders for a given receiver")
-    send_for.add_argument("name")
+    send_for.add_argument("name", nargs="?", default=os.getenv("RECEIVER_NAME"))
     send_for.set_defaults(func=lambda a: _cmd_related(a, "receiving"))
 
     tx_cmd = sub.add_parser("transactions", help="Show receiving transactions")
-    tx_cmd.add_argument("name", help="Receiving party name")
-    tx_cmd.add_argument("--bank", help="Filter by bank identifier")
+    tx_cmd.add_argument("name", nargs="?", default=os.getenv("PARTY_NAME"), help="Receiving party name")
+    tx_cmd.add_argument("--bank", default=os.getenv("BANK"), help="Filter by bank identifier")
     tx_cmd.add_argument(
         "--start-balance",
         type=float,
-        default=0.0,
+        default=float(os.getenv("START_BALANCE", "0.0")),
         help="Starting balance used for cumulative calculation",
     )
     tx_cmd.set_defaults(func=_cmd_transactions)
