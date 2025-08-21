@@ -1,5 +1,10 @@
 from lxml import etree
-from tools.goaml_query import unique_parties, related_parties, receiving_transactions
+from tools.goaml_query import (
+    unique_parties,
+    related_parties,
+    receiving_transactions,
+    labelled_transactions,
+)
 
 SAMPLE_XML = '''
 <report>
@@ -46,6 +51,7 @@ SAMPLE_XML = '''
     </t_to_my_client>
     <amount_local>100.0</amount_local>
     <date_transaction>2023-01-01T00:00:00</date_transaction>
+    <comments>local_label=1;global_label=1</comments>
   </transaction>
 </report>
 '''
@@ -70,3 +76,38 @@ def test_related_and_transactions():
     assert records[0].sender == 'Alice Sender'
     assert records[0].amount == 100.0
     assert records[0].balance_after == 110.0
+
+
+LABEL_XML = '''
+<report>
+  <transaction>
+    <t_from_my_client><from_account><institution_name>BankA</institution_name><related_persons><account_related_person><t_person><first_name>S1</first_name></t_person></account_related_person></related_persons></from_account></t_from_my_client>
+    <t_to_my_client><to_person><first_name>R1</first_name></to_person><to_account><institution_name>BankB</institution_name></to_account></t_to_my_client>
+    <amount_local>1</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+    <comments>local_label=1;global_label=0</comments>
+  </transaction>
+  <transaction>
+    <t_from_my_client><from_account><institution_name>BankA</institution_name><related_persons><account_related_person><t_person><first_name>S2</first_name></t_person></account_related_person></related_persons></from_account></t_from_my_client>
+    <t_to_my_client><to_person><first_name>R2</first_name></to_person><to_account><institution_name>BankB</institution_name></to_account></t_to_my_client>
+    <amount_local>2</amount_local>
+    <date_transaction>2023-01-02T00:00:00</date_transaction>
+    <comments>local_label=0;global_label=1</comments>
+  </transaction>
+  <transaction>
+    <t_from_my_client><from_account><institution_name>BankA</institution_name><related_persons><account_related_person><t_person><first_name>S3</first_name></t_person></account_related_person></related_persons></from_account></t_from_my_client>
+    <t_to_my_client><to_person><first_name>R3</first_name></to_person><to_account><institution_name>BankB</institution_name></to_account></t_to_my_client>
+    <amount_local>3</amount_local>
+    <date_transaction>2023-01-03T00:00:00</date_transaction>
+    <comments>local_label=1;global_label=1</comments>
+  </transaction>
+</report>
+'''
+
+
+def test_labelled_transactions():
+    root = etree.fromstring(LABEL_XML)
+    txs = root.findall('transaction')
+    assert len(labelled_transactions(txs, 'local')) == 2
+    assert len(labelled_transactions(txs, 'global')) == 2
+    assert len(labelled_transactions(txs, 'both')) == 1

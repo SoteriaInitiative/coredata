@@ -97,9 +97,10 @@ gsutil cp gs://soteria-core-data/Bank_1_transactions.json .
 cat Bank_1_transactions.json | jq . | more
 ```
 
-6. Explore the data with the query tool:
+6. Explore the data with the query tool (results are shown in tables with record counts):
 ```zsh
 python tools/goaml_query.py receivers
+python tools/goaml_query.py labels --scope both
 python tools/goaml_query.py transactions "Jessica Hale" --bank "CH National"
 ```
 <details>

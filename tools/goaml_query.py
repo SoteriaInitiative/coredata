@@ -13,6 +13,7 @@ The queries implemented are:
 3. List related parties for a given counter-party
 4. Retrieve all receiving transactions for a party across all banks
 5. Retrieve all receiving transactions for a party for a specific bank
+6. Retrieve transactions flagged by local/global labels
 
 For convenience many command line parameters can also be provided via
 environment variables:
@@ -45,11 +46,10 @@ Run ``python tools/goaml_query.py --help`` for usage information.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -77,6 +77,19 @@ class TransactionRecord:
     receiver: Party
     bank: Optional[str]
     balance_after: Optional[float] = None
+
+
+@dataclass
+class LabeledTransaction:
+    """Transaction enriched with local/global labels."""
+
+    timestamp: datetime
+    amount: float
+    sender: str
+    receiver: str
+    bank: Optional[str]
+    local_label: int
+    global_label: int
 
 
 # ---------------------------------------------------------------------------
@@ -265,22 +278,111 @@ def receiving_transactions(
     return records
 
 
+def _parse_labels(tx: etree._Element) -> Dict[str, int]:
+    """Extract local and global label flags from a transaction element."""
+
+    text = tx.findtext("comments", "")
+    parts = dict(part.split("=", 1) for part in text.split(";") if "=" in part)
+    return {
+        "local_label": int(parts.get("local_label", "0")),
+        "global_label": int(parts.get("global_label", "0")),
+    }
+
+
+def labelled_transactions(transactions: Iterable[etree._Element], scope: str) -> List[LabeledTransaction]:
+    """Return transactions whose label flag is ``1`` for the given scope."""
+
+    results: List[LabeledTransaction] = []
+    for tx in transactions:
+        labels = _parse_labels(tx)
+        local = labels["local_label"]
+        global_ = labels["global_label"]
+        if scope == "local" and local != 1:
+            continue
+        if scope == "global" and global_ != 1:
+            continue
+        if scope == "both" and not (local == 1 and global_ == 1):
+            continue
+
+        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
+        receiver = _extract_party_from_person_el(
+            tx.find("t_to_my_client/to_person"),
+            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
+            iban=tx.findtext("t_to_my_client/to_account/iban"),
+        )
+        amount = float(tx.findtext("amount_local") or 0)
+        ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
+        timestamp = datetime.fromisoformat(ts_str)
+        results.append(
+            LabeledTransaction(
+                timestamp=timestamp,
+                amount=amount,
+                sender=sender.name,
+                receiver=receiver.name,
+                bank=receiver.bank,
+                local_label=local,
+                global_label=global_,
+            )
+        )
+    results.sort(key=lambda r: r.timestamp)
+    return results
+
+
+def _print_table(rows: List[Dict[str, Any]]) -> None:
+    """Print ``rows`` as a simple table and append record count."""
+
+    if not rows:
+        print("No records found.")
+        print("Total records: 0")
+        return
+    headers = list(rows[0].keys())
+    widths = {h: len(h) for h in headers}
+    for row in rows:
+        for h in headers:
+            widths[h] = max(widths[h], len(str(row.get(h, ""))))
+    header_row = " | ".join(f"{h:<{widths[h]}}" for h in headers)
+    divider = "-+-".join("-" * widths[h] for h in headers)
+    print(header_row)
+    print(divider)
+    for row in rows:
+        print(" | ".join(f"{str(row.get(h, '')):<{widths[h]}}" for h in headers))
+    print(f"Total records: {len(rows)}")
+
+
 # ---------------------------------------------------------------------------
 # Command line interface
 # ---------------------------------------------------------------------------
 
 def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
     txs = load_transactions()
-    for party in unique_parties(txs, role):
-        print(json.dumps(party.__dict__, indent=2))
+    rows = [
+        {
+            "Name": p.name,
+            "DOB": p.dob or "",
+            "Bank": p.bank or "",
+            "Address": p.address or "",
+            "IBAN": p.iban or "",
+        }
+        for p in unique_parties(txs, role)
+    ]
+    _print_table(rows)
 
 
 def _cmd_related(args: argparse.Namespace, role: str) -> None:
     if not args.name:
         raise SystemExit("A party name must be provided via argument or environment variable")
     txs = load_transactions()
-    for party in related_parties(txs, args.name, role):
-        print(json.dumps(party.__dict__, indent=2))
+    rows = [
+        {
+            "Name": p.name,
+            "DOB": p.dob or "",
+            "Bank": p.bank or "",
+            "Address": p.address or "",
+            "IBAN": p.iban or "",
+        }
+        for p in related_parties(txs, args.name, role)
+    ]
+    _print_table(rows)
 
 
 def _cmd_transactions(args: argparse.Namespace) -> None:
@@ -293,17 +395,37 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
         bank=args.bank,
         start_balance=args.start_balance,
     )
-    for r in records:
-        payload = {
-            "timestamp": r.timestamp.isoformat(),
-            "amount": r.amount,
-            "sender": r.sender,
-            "balance_after": r.balance_after,
-            "bank": r.bank,
+    rows = [
+        {
+            "Timestamp": r.timestamp.isoformat(),
+            "Amount": f"{r.amount:.2f}",
+            "Sender": r.sender,
+            "Bank": r.bank or "",
+            "Balance": f"{r.balance_after:.2f}" if r.balance_after is not None else "",
         }
-        print(json.dumps(payload, indent=2))
+        for r in records
+    ]
+    _print_table(rows)
     if records:
         print(f"Final balance: {records[-1].balance_after:.2f}")
+
+
+def _cmd_labels(args: argparse.Namespace) -> None:
+    txs = load_transactions()
+    records = labelled_transactions(txs, args.scope)
+    rows = [
+        {
+            "Timestamp": r.timestamp.isoformat(),
+            "Amount": f"{r.amount:.2f}",
+            "Sender": r.sender,
+            "Receiver": r.receiver,
+            "Bank": r.bank or "",
+            "Local": r.local_label,
+            "Global": r.global_label,
+        }
+        for r in records
+    ]
+    _print_table(rows)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -334,6 +456,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Starting balance used for cumulative calculation",
     )
     tx_cmd.set_defaults(func=_cmd_transactions)
+
+    lbl_cmd = sub.add_parser("labels", help="Transactions with label flag equal to 1")
+    lbl_cmd.add_argument(
+        "--scope",
+        choices=["local", "global", "both"],
+        default="local",
+        help="Select which label to filter by",
+    )
+    lbl_cmd.set_defaults(func=_cmd_labels)
 
     return parser
 
