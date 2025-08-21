@@ -2,7 +2,7 @@
 
 This module connects to the ``soteria-core-data`` bucket and loads the most recent
 folder of generated data. It provides helper functions that perform common
-queries on the JSON transactions produced by the synthetic data generator. The
+queries on the goAML XML reports produced by the synthetic data generator. The
 implementation intentionally avoids depending on ``pandas`` so that it can run in
 minimal environments.
 
@@ -53,6 +53,7 @@ from typing import Dict, Iterable, List, Optional
 
 from google.cloud import storage
 from google.oauth2 import service_account
+from lxml import etree
 
 
 @dataclass(frozen=True)
@@ -127,24 +128,19 @@ def _get_latest_prefix(bucket: storage.Bucket) -> str:
     return max(folders.items(), key=lambda item: item[1])[0]
 
 
-def _download_json(bucket: storage.Bucket, blob_name: str) -> Iterable[dict]:
-    data = json.loads(bucket.blob(blob_name).download_as_bytes())
-    if isinstance(data, list):
-        return data
-    raise ValueError(f"Expected list in {blob_name}")
-
-
-def load_transactions(prefix: Optional[str] = None) -> List[dict]:
-    """Load all transaction JSON files from the latest folder in the bucket."""
+def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
+    """Load all transaction elements from goAML XML reports in the bucket."""
 
     client = _get_storage_client()
     bucket = client.bucket(_get_bucket_name())
     if prefix is None:
         prefix = _get_latest_prefix(bucket)
-    transactions: List[dict] = []
+    transactions: List[etree._Element] = []
     for blob in bucket.list_blobs(prefix=prefix):
-        if blob.name.endswith("_transactions.json"):
-            transactions.extend(_download_json(bucket, blob.name))
+        if not blob.name.endswith(".xml"):
+            continue
+        root = etree.fromstring(blob.download_as_bytes())
+        transactions.extend(root.findall("transaction"))
     return transactions
 
 
@@ -152,50 +148,61 @@ def load_transactions(prefix: Optional[str] = None) -> List[dict]:
 # Query helpers
 # ---------------------------------------------------------------------------
 
-def _format_address(addr: Optional[dict]) -> Optional[str]:
-    if not isinstance(addr, dict):
-        return addr
-    parts = [addr.get("address"), addr.get("city"), addr.get("country_code")]
+def _format_address_el(addr_el: Optional[etree._Element]) -> Optional[str]:
+    if addr_el is None:
+        return None
+    parts = [
+        addr_el.findtext("address"),
+        addr_el.findtext("city"),
+        addr_el.findtext("country_code"),
+    ]
     return ", ".join([p for p in parts if p])
 
 
-def _extract_party_from_account(account: dict, name: str) -> Party:
-    address = account.get("address")
-    if isinstance(address, dict):
-        address = _format_address(address)
-    return Party(
-        name=name,
-        dob=account.get("birthdate"),
-        bank=account.get("bank_name") or account.get("bic"),
-        address=address,
-        iban=account.get("iban"),
-    )
+def _extract_party_from_person_el(
+    person_el: Optional[etree._Element],
+    *,
+    bank: Optional[str] = None,
+    iban: Optional[str] = None,
+) -> Party:
+    if person_el is None:
+        return Party(name="Unknown", bank=bank, iban=iban)
+    first = person_el.findtext("first_name", "").strip()
+    last = person_el.findtext("last_name", "").strip()
+    name = " ".join(part for part in [first, last] if part) or "Unknown"
+    dob = person_el.findtext("birthdate")
+    addr = _format_address_el(person_el.find("addresses/address"))
+    return Party(name=name, dob=dob, bank=bank, address=addr, iban=iban)
 
 
-def unique_parties(transactions: Iterable[dict], role: str) -> List[Party]:
+def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Party:
+    bank = iban = None
+    person_el = None
+    if account_el is not None:
+        bank = account_el.findtext("institution_name") or account_el.findtext("swift")
+        iban = account_el.findtext("iban")
+        person_el = account_el.find("related_persons/account_related_person/t_person")
+    return _extract_party_from_person_el(person_el, bank=bank, iban=iban)
+
+
+def unique_parties(transactions: Iterable[etree._Element], role: str) -> List[Party]:
     """Return a list of unique parties for the given role."""
 
     parties: Dict[str, Party] = {}
     for tx in transactions:
-        tdata = tx.get("Transaction", {})
-        account = tdata.get("account", {})
-        if account.get("transaction_role") != role:
-            continue
         if role == "sending":
-            name = tdata.get("transaction_originator", "Unknown")
+            acc_el = tx.find("t_from_my_client/from_account")
+            party = _extract_party_from_account_el(acc_el)
         else:
-            ben = tdata.get("beneficiary")
-            if isinstance(ben, dict):
-                first = ben.get("first_name", "").strip()
-                last = ben.get("last_name", "").strip()
-                name = " ".join(part for part in [first, last] if part)
-            else:
-                name = tdata.get("transaction_beneficiary", "Unknown")
-        parties[name] = _extract_party_from_account(account, name)
+            person_el = tx.find("t_to_my_client/to_person")
+            bank = tx.findtext("t_to_my_client/to_account/institution_name")
+            iban = tx.findtext("t_to_my_client/to_account/iban")
+            party = _extract_party_from_person_el(person_el, bank=bank, iban=iban)
+        parties[party.name] = party
     return list(parties.values())
 
 
-def related_parties(transactions: Iterable[dict], name: str, role: str) -> List[Party]:
+def related_parties(transactions: Iterable[etree._Element], name: str, role: str) -> List[Party]:
     """Return unique counter-parties for ``name``.
 
     If ``role`` is ``sending`` the function returns receivers for that sender.
@@ -205,19 +212,21 @@ def related_parties(transactions: Iterable[dict], name: str, role: str) -> List[
 
     results: Dict[str, Party] = {}
     for tx in transactions:
-        tdata = tx.get("Transaction", {})
-        account = tdata.get("account", {})
-        sender_name = tdata.get("transaction_originator")
-        receiver_name = tdata.get("transaction_beneficiary")
-        if role == "sending" and sender_name == name:
-            results[receiver_name] = _extract_party_from_account(account, receiver_name)
-        elif role == "receiving" and receiver_name == name:
-            results[sender_name] = _extract_party_from_account(account, sender_name)
+        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
+        receiver = _extract_party_from_person_el(
+            tx.find("t_to_my_client/to_person"),
+            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
+            iban=tx.findtext("t_to_my_client/to_account/iban"),
+        )
+        if role == "sending" and sender.name == name:
+            results[receiver.name] = receiver
+        elif role == "receiving" and receiver.name == name:
+            results[sender.name] = sender
     return list(results.values())
 
 
 def receiving_transactions(
-    transactions: Iterable[dict],
+    transactions: Iterable[etree._Element],
     name: str,
     *,
     bank: Optional[str] = None,
@@ -228,22 +237,26 @@ def receiving_transactions(
     records: List[TransactionRecord] = []
     balance = start_balance
     for tx in transactions:
-        tdata = tx.get("Transaction", {})
-        account = tdata.get("account", {})
-        if account.get("transaction_role") != "receiving":
+        receiver = _extract_party_from_person_el(
+            tx.find("t_to_my_client/to_person"),
+            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
+            iban=tx.findtext("t_to_my_client/to_account/iban"),
+        )
+        if receiver.name != name:
             continue
-        if tdata.get("transaction_beneficiary") != name:
-            continue
-        bank_id = account.get("bank_name") or account.get("bic")
+        bank_id = receiver.bank
         if bank is not None and bank_id != bank:
             continue
-        amount = float(tdata.get("currency_amount", 0))
+        amount = float(tx.findtext("amount_local") or 0)
         balance += amount
+        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
+        ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
+        timestamp = datetime.fromisoformat(ts_str)
         record = TransactionRecord(
-            timestamp=datetime.utcfromtimestamp(tdata.get("timestamp", 0) / 1000.0),
+            timestamp=timestamp,
             amount=amount,
-            sender=tdata.get("transaction_originator", "Unknown"),
-            receiver=_extract_party_from_account(account, name),
+            sender=sender.name,
+            receiver=receiver,
             bank=bank_id,
             balance_after=balance,
         )
