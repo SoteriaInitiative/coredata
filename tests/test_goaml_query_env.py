@@ -1,4 +1,4 @@
-from tools.goaml_query import build_parser
+from tools.goaml_query import build_parser, _get_storage_client
 
 
 def test_env_defaults_receivers_for(monkeypatch):
@@ -17,3 +17,35 @@ def test_env_defaults_transactions(monkeypatch):
     assert args.name == "Bob"
     assert args.bank == "BankA"
     assert args.start_balance == 10.5
+
+
+def test_env_service_account(monkeypatch):
+    monkeypatch.setenv("GCP_PROJECT_ID", "proj")
+    monkeypatch.setenv("GCP_PRIVATE_KEY_ID", "kid")
+    monkeypatch.setenv("GCP_PRIVATE_KEY", "dummy")
+    monkeypatch.setenv("GCP_CLIENT_EMAIL", "svc@example.com")
+    monkeypatch.setenv("GCP_CLIENT_ID", "cid")
+
+    called = {}
+
+    def fake_client(*args, **kwargs):
+        called.update(kwargs)
+        return object()
+
+    dummy_creds = object()
+
+    def fake_from_info(info):
+        called["info"] = info
+        return dummy_creds
+
+    monkeypatch.setattr("tools.goaml_query.storage.Client", fake_client)
+    monkeypatch.setattr(
+        "tools.goaml_query.service_account.Credentials.from_service_account_info",
+        fake_from_info,
+    )
+
+    _get_storage_client()
+
+    assert called["project"] == "proj"
+    assert called["credentials"] is dummy_creds
+    assert called["info"]["private_key"] == "dummy"

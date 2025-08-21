@@ -30,6 +30,15 @@ environment variables:
 ``START_BALANCE``
     Default starting balance for the ``transactions`` command.
 
+Authentication with Google Cloud can also be configured via environment
+variables when a JSON credentials file is not available:
+
+``GCP_PROJECT_ID``
+``GCP_PRIVATE_KEY_ID``
+``GCP_PRIVATE_KEY``
+``GCP_CLIENT_EMAIL``
+``GCP_CLIENT_ID``
+
 Run ``python tools/goaml_query.py --help`` for usage information.
 """
 
@@ -43,6 +52,7 @@ from datetime import datetime
 from typing import Dict, Iterable, List, Optional
 
 from google.cloud import storage
+from google.oauth2 import service_account
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,27 @@ class TransactionRecord:
 # ---------------------------------------------------------------------------
 
 def _get_storage_client() -> storage.Client:
+    """Create a storage client using service-account fields from the environment."""
+
+    project_id = os.getenv("GCP_PROJECT_ID")
+    key_id = os.getenv("GCP_PRIVATE_KEY_ID")
+    private_key = os.getenv("GCP_PRIVATE_KEY")
+    client_email = os.getenv("GCP_CLIENT_EMAIL")
+    client_id = os.getenv("GCP_CLIENT_ID")
+
+    if all([project_id, key_id, private_key, client_email, client_id]):
+        info = {
+            "type": "service_account",
+            "project_id": project_id,
+            "private_key_id": key_id,
+            "private_key": private_key.replace("\\n", "\n"),
+            "client_email": client_email,
+            "client_id": client_id,
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+        creds = service_account.Credentials.from_service_account_info(info)
+        return storage.Client(credentials=creds, project=project_id)
+
     return storage.Client()
 
 
