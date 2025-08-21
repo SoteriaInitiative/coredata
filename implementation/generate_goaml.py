@@ -86,7 +86,7 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
     etree.SubElement(report, 'rentity_id').text = '1'
     etree.SubElement(report, 'rentity_branch').text = 'HO'
     etree.SubElement(report, 'submission_code').text = 'E'
-    etree.SubElement(report, 'report_code').text = 'STR'
+    etree.SubElement(report, 'report_code').text = 'AIFT'
     etree.SubElement(report, 'entity_reference').text = 'DUMMY'
     etree.SubElement(report, 'fiu_ref_number').text = 'DUMMY'
     etree.SubElement(report, 'report_date').text = f'{day}T00:00:00'
@@ -326,15 +326,15 @@ def generate_reports(args):
 def main():
     parser = argparse.ArgumentParser(description='Generate synthetic transactions and goAML reports.')
     parser.add_argument('--banks', type=int, default=2)
-    parser.add_argument('--transactions', type=int, default=100)
+    parser.add_argument('--transactions', type=int, default=1000)
     parser.add_argument('--days', type=int, default=30)
-    parser.add_argument('--parties', type=int, default=50)
+    parser.add_argument('--parties', type=int, default=100)
     parser.add_argument('--multi_bank_prob', type=float, default=0.2)
     parser.add_argument('--multi_bank_distribution', type=int, default=2)
     parser.add_argument('--std_multiplier', type=float, default=2.0)
     parser.add_argument('--max_splits', type=int, default=3)
-    parser.add_argument('--scenario_probability', type=str, default='{}')
-    parser.add_argument('--bank_knowledge', type=str, default='{}')
+    parser.add_argument('--scenario_probability', type=str, default='{"1":0.2,"2":0.1}')
+    parser.add_argument('--bank_knowledge', type=str, default='{"1":true,"2":false}')
     args = parser.parse_args()
 
     args.scenario_probability = json.loads(args.scenario_probability)

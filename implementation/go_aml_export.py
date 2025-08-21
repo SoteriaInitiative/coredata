@@ -125,7 +125,7 @@ def build_report(originator, day, transactions, currency_code_local):
     etree.SubElement(report, 'rentity_id').text = '1'
     etree.SubElement(report, 'rentity_branch').text = 'HO'
     etree.SubElement(report, 'submission_code').text = 'E'
-    etree.SubElement(report, 'report_code').text = 'SAR'
+    etree.SubElement(report, 'report_code').text = 'AIFT'
     etree.SubElement(report, 'entity_reference').text = 'DUMMY'
     etree.SubElement(report, 'fiu_ref_number').text = 'DUMMY'
     etree.SubElement(report, 'report_date').text = f'{day}T00:00:00'
@@ -138,8 +138,8 @@ def build_report(originator, day, transactions, currency_code_local):
     etree.SubElement(location, 'country_code').text = 'CH'
     etree.SubElement(location, 'state').text = 'ZH'
 
-    etree.SubElement(report, 'reason').text = f'Suspicious activity for {originator}'
-    etree.SubElement(report, 'action').text = 'Transaction reported to authorities'
+    etree.SubElement(report, 'reason')
+    etree.SubElement(report, 'action')
 
     for tx in transactions:
         tdata = tx['Transaction']
@@ -186,10 +186,16 @@ def build_report(originator, day, transactions, currency_code_local):
             to_country = 'GB'
         etree.SubElement(t_to, 'to_country').text = to_country
 
+        comments = etree.SubElement(tx_el, 'comments')
+        comments.text = (
+            f"local_label={tdata.get('local_label',0)};"
+            f"global_label={tdata.get('global_label',0)}"
+        )
+
     report_indicators = etree.SubElement(report, 'report_indicators')
+    etree.SubElement(report_indicators, 'indicator').text = '1131V'
+    etree.SubElement(report_indicators, 'indicator').text = '2003G'
     etree.SubElement(report_indicators, 'indicator').text = '0024M'
-    etree.SubElement(report_indicators, 'indicator').text = '1207V'
-    etree.SubElement(report_indicators, 'indicator').text = '2103G'
 
     additional_info = etree.SubElement(report, 'additional_information')
     info = etree.SubElement(additional_info, 'additional_info')
@@ -240,13 +246,15 @@ def export_to_goaml(json_path, currency_code_local='CHF'):
     folder = f'{timestamp}'
 
     for (originator, day), txs in grouped.items():
-        report = build_report(originator, day, txs, currency_code_local)
-        validate_report(report)
-        verify_content(txs, report)
-        xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)
-        filename = f'{bank_id}_{originator}_{day}_{timestamp}.xml'
-        gcs_path = f'{folder}/{filename}'
-        upload_report(xml_bytes, gcs_path)
+        for i in range(0, len(txs), 1000):
+            chunk = txs[i:i + 1000]
+            report = build_report(originator, day, chunk, currency_code_local)
+            validate_report(report)
+            verify_content(chunk, report)
+            xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)
+            filename = f'{bank_id}_{originator}_{day}_{timestamp}_{i//1000 + 1}.xml'
+            gcs_path = f'{folder}/{filename}'
+            upload_report(xml_bytes, gcs_path)
 
 
 if __name__ == '__main__':
