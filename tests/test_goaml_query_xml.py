@@ -66,8 +66,10 @@ def test_unique_parties_sender_receiver():
     txs = _transactions()
     senders = unique_parties(txs, 'sending')
     receivers = unique_parties(txs, 'receiving')
-    assert {p.name for p in senders} == {'Alice Sender'}
-    assert {p.name for p in receivers} == {'Bob Receiver'}
+    assert {p.party.name for p in senders} == {'Alice Sender'}
+    assert {p.party.name for p in receivers} == {'Bob Receiver'}
+    assert senders[0].incoming == 0 and senders[0].outgoing == 1
+    assert receivers[0].incoming == 1 and receivers[0].outgoing == 0
 
 def test_related_and_transactions():
     txs = _transactions()
@@ -173,8 +175,10 @@ def test_involved_parties_mapping():
     txs = _transactions_involved()
     senders = unique_parties(txs, 'sending')
     receivers = unique_parties(txs, 'receiving')
-    assert {p.name for p in senders} == {'Alice Sender'}
-    assert {p.name for p in receivers} == {'Bob Receiver'}
+    assert {p.party.name for p in senders} == {'Alice Sender'}
+    assert {p.party.name for p in receivers} == {'Bob Receiver'}
+    assert senders[0].incoming == 0 and senders[0].outgoing == 1
+    assert receivers[0].incoming == 1 and receivers[0].outgoing == 0
     recs = related_parties(txs, 'Alice Sender', 'sending')
     assert [p.name for p in recs] == ['Bob Receiver']
     records = party_transactions(txs, 'Bob', 'Receiver', '1980-02-02T00:00:00')

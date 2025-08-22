@@ -69,6 +69,15 @@ class Party:
     iban: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class PartyTxCounts:
+    """A party enriched with incoming/outgoing transaction counts."""
+
+    party: Party
+    incoming: int = 0
+    outgoing: int = 0
+
+
 @dataclass
 class TransactionRecord:
     """Simplified view of a party transaction."""
@@ -277,15 +286,32 @@ def _extract_parties(tx: etree._Element) -> (Party, Party):
     return sender, receiver
 
 
-def unique_parties(transactions: Iterable[etree._Element], role: str) -> List[Party]:
-    """Return a list of unique parties for the given role."""
+def unique_parties(
+    transactions: Iterable[etree._Element], role: str
+) -> List[PartyTxCounts]:
+    """Return unique parties with transaction counts for the given role."""
 
     parties: Dict[str, Party] = {}
+    counts: Dict[str, Dict[str, int]] = {}
+
     for tx in transactions:
         sender, receiver = _extract_parties(tx)
-        party = sender if role == "sending" else receiver
-        parties[party.name] = party
-    return list(parties.values())
+        parties[sender.name] = sender
+        parties[receiver.name] = receiver
+
+        counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
+        counts.setdefault(receiver.name, {"incoming": 0, "outgoing": 0})["incoming"] += 1
+
+    results: List[PartyTxCounts] = []
+    for name, party in parties.items():
+        incoming = counts.get(name, {}).get("incoming", 0)
+        outgoing = counts.get(name, {}).get("outgoing", 0)
+        if role == "sending" and outgoing == 0:
+            continue
+        if role == "receiving" and incoming == 0:
+            continue
+        results.append(PartyTxCounts(party=party, incoming=incoming, outgoing=outgoing))
+    return results
 
 
 def related_parties(transactions: Iterable[etree._Element], name: str, role: str) -> List[Party]:
@@ -453,13 +479,15 @@ def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
     txs = load_transactions()
     rows = [
         {
-            "Name": p.name,
-            "DOB": p.dob or "",
-            "Bank": p.bank or "",
-            "Address": p.address or "",
-            "IBAN": p.iban or "",
+            "Name": stats.party.name,
+            "DOB": stats.party.dob or "",
+            "Bank": stats.party.bank or "",
+            "Address": stats.party.address or "",
+            "IBAN": stats.party.iban or "",
+            "Incoming Tx": stats.incoming,
+            "Outgoing Tx": stats.outgoing,
         }
-        for p in unique_parties(txs, role)
+        for stats in unique_parties(txs, role)
     ]
     _print_table(rows)
 

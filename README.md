@@ -108,6 +108,8 @@ senders and receivers are identified even when transactions only reference
 accounts. The ``transactions`` command reports both incoming and outgoing
 payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
+The ``senders`` and ``receivers`` commands additionally show counts of incoming
+and outgoing transactions for each party.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
