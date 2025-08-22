@@ -185,18 +185,68 @@ def _get_latest_prefix(bucket: storage.Bucket) -> str:
     return max(folders.items(), key=lambda item: item[1])[0]
 
 
-def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
-    """Load all transaction elements from goAML XML reports in the bucket."""
+def _get_cache_dir() -> str:
+    """Return the directory used for caching downloaded XML files."""
 
-    client = _get_storage_client()
-    bucket = client.bucket(_get_bucket_name())
+    return os.getenv("GOAML_CACHE_DIR", ".goaml_cache")
+
+
+def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
+    """Load all transaction elements from goAML XML reports in the bucket.
+
+    Downloaded XML files are cached locally so subsequent runs avoid repeated
+    network calls.  Set the ``GOAML_CACHE_DIR`` environment variable to override
+    the cache location.
+    """
+
+    cache_root = _get_cache_dir()
+    os.makedirs(cache_root, exist_ok=True)
+
+    # When a prefix is provided and cached, avoid hitting the network entirely.
+    if prefix is not None:
+        cache_dir = os.path.join(cache_root, prefix)
+        if os.path.isdir(cache_dir):
+            transactions: List[etree._Element] = []
+            for name in os.listdir(cache_dir):
+                if not name.endswith(".xml"):
+                    continue
+                path = os.path.join(cache_dir, name)
+                root = etree.parse(path).getroot()
+                transactions.extend(root.findall("transaction"))
+            return transactions
+
+    client: Optional[storage.Client] = None
+    bucket: Optional[storage.Bucket] = None
     if prefix is None:
+        client = _get_storage_client()
+        bucket = client.bucket(_get_bucket_name())
         prefix = _get_latest_prefix(bucket)
+    cache_dir = os.path.join(cache_root, prefix)
+    if os.path.isdir(cache_dir):
+        transactions: List[etree._Element] = []
+        for name in os.listdir(cache_dir):
+            if not name.endswith(".xml"):
+                continue
+            path = os.path.join(cache_dir, name)
+            root = etree.parse(path).getroot()
+            transactions.extend(root.findall("transaction"))
+        return transactions
+
+    if client is None:
+        client = _get_storage_client()
+        bucket = client.bucket(_get_bucket_name())
+
+    os.makedirs(cache_dir, exist_ok=True)
     transactions: List[etree._Element] = []
+    assert bucket is not None
     for blob in bucket.list_blobs(prefix=prefix):
         if not blob.name.endswith(".xml"):
             continue
-        root = etree.fromstring(blob.download_as_bytes())
+        data = blob.download_as_bytes()
+        filename = os.path.basename(blob.name)
+        with open(os.path.join(cache_dir, filename), "wb") as fh:
+            fh.write(data)
+        root = etree.fromstring(data)
         transactions.extend(root.findall("transaction"))
     return transactions
 

@@ -106,12 +106,14 @@ python tools/goaml_query.py labels --scope both
 python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
 python tools/goaml_query.py multi-bank
 ```
-The tool resolves party names from ``involved_parties`` sections so that
+Downloaded XML files are cached under ``.goaml_cache`` (override with
+``GOAML_CACHE_DIR``) to avoid repeat downloads between runs. The tool resolves
+party names from ``involved_parties`` sections so that
 senders and receivers are identified even when transactions only reference
 accounts. The ``transactions`` command reports both incoming and outgoing
 payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
- After the table the command also prints the final balance along with the mean
+After the table the command also prints the final balance along with the mean
  and median transaction amounts. The ``senders`` and ``receivers`` commands
  additionally show counts of incoming and outgoing transactions for each party,
  plus an ``Accounts`` column indicating how many distinct bank accounts are
