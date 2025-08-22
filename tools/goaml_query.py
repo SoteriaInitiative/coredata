@@ -11,8 +11,8 @@ The queries implemented are:
 1. List unique sending parties and entities
 2. List unique receiving parties and entities
 3. List related parties for a given counter-party
-4. Retrieve all receiving transactions for a party across all banks
-5. Retrieve all receiving transactions for a party for a specific bank
+4. Retrieve all transactions for a party across all banks
+5. Retrieve all transactions for a party for a specific bank
 6. Retrieve transactions flagged by local/global labels
 
 For convenience many command line parameters can also be provided via
@@ -71,12 +71,12 @@ class Party:
 
 @dataclass
 class TransactionRecord:
-    """Simplified view of a transaction used for time sorted queries."""
+    """Simplified view of a party transaction."""
 
     timestamp: datetime
     amount: float
-    sender: str
-    receiver: Party
+    counterparty: str
+    direction: str  # "in" for incoming funds, "out" for outgoing
     bank: Optional[str]
     balance_after: Optional[float] = None
 
@@ -253,7 +253,7 @@ def related_parties(transactions: Iterable[etree._Element], name: str, role: str
     return list(results.values())
 
 
-def receiving_transactions(
+def party_transactions(
     transactions: Iterable[etree._Element],
     first_name: str,
     last_name: str,
@@ -262,41 +262,78 @@ def receiving_transactions(
     bank: Optional[str] = None,
     start_balance: float = 0.0,
 ) -> List[TransactionRecord]:
-    """Return time sorted receiving transactions for a specific party."""
+    """Return time sorted transactions for ``first_name``/``last_name``/``dob``.
+
+    Both incoming and outgoing transactions are returned. Incoming amounts are
+    added to the balance while outgoing amounts are subtracted.
+    """
 
     records: List[TransactionRecord] = []
     balance = start_balance
     for tx in transactions:
+        # Check receiving side
         person_el = _unwrap_person_el(tx.find("t_to_my_client/to_person"))
-        if person_el is None:
+        first = person_el.findtext("first_name", "").strip() if person_el is not None else ""
+        last = person_el.findtext("last_name", "").strip() if person_el is not None else ""
+        dob_tx = person_el.findtext("birthdate") if person_el is not None else None
+        if person_el is not None and first == first_name and last == last_name and dob_tx == dob:
+            receiver = _extract_party_from_person_el(
+                person_el,
+                bank=tx.findtext("t_to_my_client/to_account/institution_name"),
+                iban=tx.findtext("t_to_my_client/to_account/iban"),
+            )
+            bank_id = receiver.bank
+            if bank is not None and bank_id != bank:
+                continue
+            amount = float(tx.findtext("amount_local") or 0)
+            balance += amount
+            counterparty = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
+            ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
+            timestamp = datetime.fromisoformat(ts_str)
+            records.append(
+                TransactionRecord(
+                    timestamp=timestamp,
+                    amount=amount,
+                    counterparty=counterparty.name,
+                    direction="in",
+                    bank=bank_id,
+                    balance_after=balance,
+                )
+            )
             continue
-        first = person_el.findtext("first_name", "").strip()
-        last = person_el.findtext("last_name", "").strip()
-        dob_tx = person_el.findtext("birthdate")
-        if first != first_name or last != last_name or dob_tx != dob:
-            continue
-        receiver = _extract_party_from_person_el(
-            person_el,
-            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
-            iban=tx.findtext("t_to_my_client/to_account/iban"),
+
+        # Check sending side
+        from_person_el = _unwrap_person_el(
+            tx.find("t_from_my_client/from_account/related_persons/account_related_person/t_person")
         )
-        bank_id = receiver.bank
-        if bank is not None and bank_id != bank:
-            continue
-        amount = float(tx.findtext("amount_local") or 0)
-        balance += amount
-        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
-        ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
-        timestamp = datetime.fromisoformat(ts_str)
-        record = TransactionRecord(
-            timestamp=timestamp,
-            amount=amount,
-            sender=sender.name,
-            receiver=receiver,
-            bank=bank_id,
-            balance_after=balance,
-        )
-        records.append(record)
+        first = from_person_el.findtext("first_name", "").strip() if from_person_el is not None else ""
+        last = from_person_el.findtext("last_name", "").strip() if from_person_el is not None else ""
+        dob_tx = from_person_el.findtext("birthdate") if from_person_el is not None else None
+        if from_person_el is not None and first == first_name and last == last_name and dob_tx == dob:
+            bank_id = tx.findtext("t_from_my_client/from_account/institution_name") or tx.findtext(
+                "t_from_my_client/from_account/swift"
+            )
+            if bank is not None and bank_id != bank:
+                continue
+            amount = float(tx.findtext("amount_local") or 0)
+            balance -= amount
+            counterparty = _extract_party_from_person_el(
+                tx.find("t_to_my_client/to_person"),
+                bank=tx.findtext("t_to_my_client/to_account/institution_name"),
+                iban=tx.findtext("t_to_my_client/to_account/iban"),
+            )
+            ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
+            timestamp = datetime.fromisoformat(ts_str)
+            records.append(
+                TransactionRecord(
+                    timestamp=timestamp,
+                    amount=amount,
+                    counterparty=counterparty.name,
+                    direction="out",
+                    bank=bank_id,
+                    balance_after=balance,
+                )
+            )
     records.sort(key=lambda r: r.timestamp)
     return records
 
@@ -414,7 +451,7 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
             "First name, last name and DOB must be provided via arguments or environment variables"
         )
     txs = load_transactions()
-    records = receiving_transactions(
+    records = party_transactions(
         txs,
         args.first_name,
         args.last_name,
@@ -426,7 +463,8 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
         {
             "Timestamp": r.timestamp.isoformat(),
             "Amount": f"{r.amount:.2f}",
-            "Sender": r.sender,
+            "Counterparty": r.counterparty,
+            "Direction": r.direction,
             "Bank": r.bank or "",
             "Balance": f"{r.balance_after:.2f}" if r.balance_after is not None else "",
         }
@@ -473,24 +511,24 @@ def build_parser() -> argparse.ArgumentParser:
     send_for.add_argument("name", nargs="?", default=os.getenv("RECEIVER_NAME"))
     send_for.set_defaults(func=lambda a: _cmd_related(a, "receiving"))
 
-    tx_cmd = sub.add_parser("transactions", help="Show receiving transactions")
+    tx_cmd = sub.add_parser("transactions", help="Show transactions for a party")
     tx_cmd.add_argument(
         "first_name",
         nargs="?",
         default=os.getenv("PARTY_FIRST_NAME"),
-        help="Receiving party first name",
+        help="Party first name",
     )
     tx_cmd.add_argument(
         "last_name",
         nargs="?",
         default=os.getenv("PARTY_LAST_NAME"),
-        help="Receiving party last name",
+        help="Party last name",
     )
     tx_cmd.add_argument(
         "dob",
         nargs="?",
         default=os.getenv("PARTY_DOB"),
-        help="Receiving party date of birth",
+        help="Party date of birth",
     )
     tx_cmd.add_argument("--bank", default=os.getenv("BANK"), help="Filter by bank identifier")
     tx_cmd.add_argument(

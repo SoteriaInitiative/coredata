@@ -2,7 +2,7 @@ from lxml import etree
 from tools.goaml_query import (
     unique_parties,
     related_parties,
-    receiving_transactions,
+    party_transactions,
     labelled_transactions,
 )
 
@@ -71,7 +71,8 @@ def test_related_and_transactions():
     txs = _transactions()
     recs = related_parties(txs, 'Alice Sender', 'sending')
     assert [p.name for p in recs] == ['Bob Receiver']
-    records = receiving_transactions(
+    # Incoming for Bob
+    records = party_transactions(
         txs,
         'Bob',
         'Receiver',
@@ -79,9 +80,23 @@ def test_related_and_transactions():
         start_balance=10.0,
     )
     assert len(records) == 1
-    assert records[0].sender == 'Alice Sender'
+    assert records[0].counterparty == 'Alice Sender'
+    assert records[0].direction == 'in'
     assert records[0].amount == 100.0
     assert records[0].balance_after == 110.0
+    # Outgoing for Alice
+    records = party_transactions(
+        txs,
+        'Alice',
+        'Sender',
+        '1970-01-01T00:00:00',
+        start_balance=10.0,
+    )
+    assert len(records) == 1
+    assert records[0].counterparty == 'Bob Receiver'
+    assert records[0].direction == 'out'
+    assert records[0].amount == 100.0
+    assert records[0].balance_after == -90.0
 
 
 NESTED_XML = '''
@@ -112,12 +127,12 @@ NESTED_XML = '''
 '''
 
 
-def test_receiving_transactions_nested_person():
+def test_party_transactions_nested_person():
     root = etree.fromstring(NESTED_XML)
     txs = root.findall('transaction')
-    records = receiving_transactions(txs, 'Jessica', 'Hale', '1948-11-07T00:00:00')
+    records = party_transactions(txs, 'Jessica', 'Hale', '1948-11-07T00:00:00')
     assert len(records) == 1
-    assert records[0].sender == 'Sender'
+    assert records[0].counterparty == 'Sender'
 
 
 LABEL_XML = '''
