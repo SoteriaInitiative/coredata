@@ -174,12 +174,25 @@ def _format_address_el(addr_el: Optional[etree._Element]) -> Optional[str]:
     return ", ".join([p for p in parts if p])
 
 
+def _unwrap_person_el(person_el: Optional[etree._Element]) -> Optional[etree._Element]:
+    """Return the underlying ``t_person`` element if wrapped in ``to_person``."""
+
+    if person_el is None:
+        return None
+    if person_el.tag != "t_person":
+        nested = person_el.find("t_person")
+        if nested is not None:
+            return nested
+    return person_el
+
+
 def _extract_party_from_person_el(
     person_el: Optional[etree._Element],
     *,
     bank: Optional[str] = None,
     iban: Optional[str] = None,
 ) -> Party:
+    person_el = _unwrap_person_el(person_el)
     if person_el is None:
         return Party(name="Unknown", bank=bank, iban=iban)
     first = person_el.findtext("first_name", "").strip()
@@ -254,7 +267,7 @@ def receiving_transactions(
     records: List[TransactionRecord] = []
     balance = start_balance
     for tx in transactions:
-        person_el = tx.find("t_to_my_client/to_person")
+        person_el = _unwrap_person_el(tx.find("t_to_my_client/to_person"))
         if person_el is None:
             continue
         first = person_el.findtext("first_name", "").strip()

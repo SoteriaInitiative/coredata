@@ -84,6 +84,42 @@ def test_related_and_transactions():
     assert records[0].balance_after == 110.0
 
 
+NESTED_XML = '''
+<report>
+  <transaction>
+    <t_from_my_client>
+      <from_account>
+        <related_persons>
+          <account_related_person>
+            <t_person><first_name>Sender</first_name></t_person>
+          </account_related_person>
+        </related_persons>
+      </from_account>
+    </t_from_my_client>
+    <t_to_my_client>
+      <to_person>
+        <t_person>
+          <first_name>Jessica</first_name>
+          <last_name>Hale</last_name>
+          <birthdate>1948-11-07T00:00:00</birthdate>
+        </t_person>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>50</amount_local>
+    <date_transaction>2024-01-01T00:00:00</date_transaction>
+  </transaction>
+</report>
+'''
+
+
+def test_receiving_transactions_nested_person():
+    root = etree.fromstring(NESTED_XML)
+    txs = root.findall('transaction')
+    records = receiving_transactions(txs, 'Jessica', 'Hale', '1948-11-07T00:00:00')
+    assert len(records) == 1
+    assert records[0].sender == 'Sender'
+
+
 LABEL_XML = '''
 <report>
   <transaction>
