@@ -184,3 +184,36 @@ def test_report_validates_against_xsd():
     (originator, day), tx_list = next(iter(grouped.items()))
     report = generate_goaml.build_report(1, originator, day, tx_list, 'CHF')
     generate_goaml.validate_report(report)
+
+
+def test_lei_client_number_and_beneficial_owner():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
+    )
+    # entity beneficiary transaction
+    entity_tx = next(t for t in txs if t['Transaction']['beneficiary_account']['party_type'] == 'entity')
+    originator = entity_tx['Transaction']['transaction_originator']
+    day = datetime.utcfromtimestamp(entity_tx['Transaction']['timestamp'] / 1000).strftime('%Y-%m-%d')
+    report_entity = generate_goaml.build_report(1, originator, day, [entity_tx], 'CHF')
+    acc_el = report_entity.find('.//t_to_my_client/to_account')
+    lei = acc_el.findtext('related_entities/account_related_entity/entity/incorporation_number')
+    assert lei and len(lei) == 20
+    name = acc_el.findtext('related_entities/account_related_entity/entity/name')
+    assert any(form in name for form in generate_goaml.LEGAL_FORMS)
+    client_num = acc_el.findtext('client_number')
+    assert client_num != '000000'
+    roles = [el.text for el in acc_el.findall('related_persons/account_related_person/role')]
+    entity_rel = [el.text for el in acc_el.findall('related_entities/account_related_entity/account_entity_relation')]
+    bo_count = sum(1 for r in roles if r in {'1', '2'}) + sum(1 for r in entity_rel if r in {'ACCCO'})
+    assert bo_count == 1
+    # person beneficiary transaction
+    person_tx = next(t for t in txs if t['Transaction']['beneficiary_account']['party_type'] == 'person')
+    originator_p = person_tx['Transaction']['transaction_originator']
+    day_p = datetime.utcfromtimestamp(person_tx['Transaction']['timestamp'] / 1000).strftime('%Y-%m-%d')
+    report_person = generate_goaml.build_report(1, originator_p, day_p, [person_tx], 'CHF')
+    acc_person = report_person.find('.//t_to_my_client/to_account')
+    client_num_p = acc_person.findtext('client_number')
+    assert client_num_p != '000000'

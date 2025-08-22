@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from faker import Faker
+from faker.providers import BaseProvider
 from lxml import etree
 import xmlschema
 
@@ -36,12 +37,22 @@ ACCOUNT_TYPE_MAP = {
 
 fake = Faker()
 
-LEGAL_FORMS = ["AG", "GmbH", "Inc", "Ltd"]
+
+class LeiProvider(BaseProvider):
+    def lei(self):
+        chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        return "".join(self.random_choices(chars, length=20))
+
+
+fake.add_provider(LeiProvider)
+
+LEGAL_FORMS = ["AG", "GmbH", "LLC", "S.A.", "KG"]
 LEGAL_FORM_CODES = {
     "AG": "6",
     "GmbH": "7",
-    "Inc": "13",
-    "Ltd": "14",
+    "LLC": "13",
+    "S.A.": "14",
+    "KG": "15",
 }
 
 
@@ -69,7 +80,7 @@ def _build_entity(parent, name, legal_form, address):
     etree.SubElement(parent, 'name').text = name
     etree.SubElement(parent, 'commercial_name').text = name
     etree.SubElement(parent, 'incorporation_legal_form').text = LEGAL_FORM_CODES.get(legal_form, '1')
-    etree.SubElement(parent, 'incorporation_number').text = '000000'
+    etree.SubElement(parent, 'incorporation_number').text = fake.lei()
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
     etree.SubElement(parent, 'incorporation_country_code').text = address.get('country_code', 'CH')
@@ -85,7 +96,8 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'account').text = account.get('account_id', '000000')
     etree.SubElement(acc_el, 'currency_code').text = currency_code_local
     etree.SubElement(acc_el, 'iban').text = account.get('iban', 'CH9300762011623852957')
-    etree.SubElement(acc_el, 'client_number').text = '000000'
+    client_num = account.get('client_number') or f"{fake.random_number(digits=6, fix_len=True)}"
+    etree.SubElement(acc_el, 'client_number').text = str(client_num)
     acc_type = ACCOUNT_TYPE_MAP.get(account.get('account_type', 'current'), '1')
     etree.SubElement(acc_el, 'account_type').text = acc_type
     if account.get('party_type') == 'entity':
@@ -97,7 +109,6 @@ def _build_account(parent, account, currency_code_local, day, tag):
         _build_entity(ent, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
         rr = etree.SubElement(are, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
-        # XSD requires at least one related_person entry even for entity accounts
         related_persons = etree.SubElement(acc_el, 'related_persons')
         arp = etree.SubElement(related_persons, 'account_related_person')
         tp = etree.SubElement(arp, 't_person')
@@ -108,7 +119,7 @@ def _build_account(parent, account, currency_code_local, day, tag):
             addr,
             account.get('birthdate', '1900-01-01T00:00:00'),
         )
-        etree.SubElement(arp, 'role').text = '1'
+        etree.SubElement(arp, 'role').text = '6'
         rr = etree.SubElement(arp, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     else:
@@ -296,8 +307,8 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'address': address,
             }
         else:
-            name = fake.company()
             legal_form = random.choice(LEGAL_FORMS)
+            name = f"{fake.company()} {legal_form}"
             party_info = {
                 'id': pid,
                 'type': 'entity',
@@ -344,12 +355,13 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'last_name': recv_last,
                 'birthdate': recv_birth,
                 'party_type': 'person',
+                'client_number': fake.random_number(digits=6, fix_len=True),
                 'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
             }
         else:
-            rname = fake.company()
             rform = random.choice(LEGAL_FORMS)
+            rname = f"{fake.company()} {rform}"
             receivers[pid] = {
                 'type': 'entity',
                 'name': rname,
@@ -367,6 +379,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'name': rname,
                 'legal_form': rform,
                 'party_type': 'entity',
+                'client_number': fake.random_number(digits=6, fix_len=True),
                 'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
             }
@@ -392,6 +405,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'balance_after': 0.0,
                 'country_code': 'CH',
                 'party_type': party_type,
+                'client_number': fake.random_number(digits=6, fix_len=True),
             }
             if party_type == 'person':
                 acc.update({

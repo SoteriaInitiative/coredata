@@ -8,6 +8,7 @@ import logging
 from lxml import etree
 import xmlschema
 from faker import Faker
+from faker.providers import BaseProvider
 from . import generate_goaml
 
 try:  # pragma: no cover - handled in tests
@@ -20,6 +21,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 fake = Faker()
+
+
+class LeiProvider(BaseProvider):
+    def lei(self):
+        chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        return "".join(self.random_choices(chars, length=20))
+
+
+fake.add_provider(LeiProvider)
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '..', 'standard', 'XML_Schema.xsd')
 
@@ -115,6 +125,7 @@ def _build_entity(parent, info):
     form = info.get('legal_form', 'AG')
     form_code = generate_goaml.LEGAL_FORM_CODES.get(form, '1')
     etree.SubElement(parent, 'incorporation_legal_form').text = form_code
+    etree.SubElement(parent, 'incorporation_number').text = fake.lei()
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, info.get('address'))
     etree.SubElement(parent, 'incorporation_country_code').text = info.get('address', {}).get('country_code', 'CH')
@@ -131,7 +142,8 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'account').text = account.get('account_id', '000000')
     etree.SubElement(acc_el, 'currency_code').text = currency_code_local
     etree.SubElement(acc_el, 'iban').text = account.get('iban', 'CH9300762011623852957')
-    etree.SubElement(acc_el, 'client_number').text = '000000'
+    client_num = account.get('client_number') or f"{fake.random_number(digits=6, fix_len=True)}"
+    etree.SubElement(acc_el, 'client_number').text = str(client_num)
     acc_type = ACCOUNT_TYPE_MAP.get(str(account.get('account_type', '')).lower(), '14')
     etree.SubElement(acc_el, 'account_type').text = acc_type
     if account.get('party_type') == 'entity':
@@ -146,7 +158,7 @@ def _build_account(parent, account, currency_code_local, day, tag):
         arp = etree.SubElement(related_persons, 'account_related_person')
         tp = etree.SubElement(arp, 't_person')
         _build_person(tp, account)
-        etree.SubElement(arp, 'role').text = '1'
+        etree.SubElement(arp, 'role').text = '6'
         rr = etree.SubElement(arp, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     else:
