@@ -115,6 +115,15 @@ The ``senders`` and ``receivers`` commands additionally show counts of incoming
 and outgoing transactions for each party, plus an ``Accounts`` column indicating
 how many distinct bank accounts are associated with each party. The ``multi-bank``
 command lists parties that hold accounts at more than one bank.
+
+To serve these queries over HTTP—suitable for deployment on Cloud Run—start the
+built-in Flask application. The service listens on the port defined by the
+``PORT`` environment variable (default ``8080``) and exposes endpoints such as
+``/receivers``, ``/senders`` and ``/transactions``:
+
+```zsh
+python tools/goaml_query.py serve
+```
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
