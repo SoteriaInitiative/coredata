@@ -135,6 +135,7 @@ This release includes the following key features:
 - Comprehensive personal identify attributes for entity identification
 - Synthetic goAML generator and exporter for multi-bank large cash scenarios
 - goAML reports group same-day transactions by originator and track account balances
+- Reports use STR code and include standard indicators 1131V and 2003G
 
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
