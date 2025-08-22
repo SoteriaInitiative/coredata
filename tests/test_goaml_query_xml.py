@@ -1,4 +1,5 @@
 from lxml import etree
+from statistics import mean, median
 from tools.goaml_query import (
     unique_parties,
     related_parties,
@@ -239,6 +240,57 @@ def test_party_transactions_nested_person():
     records = party_transactions(txs, 'Jessica', 'Hale', '1948-11-07T00:00:00')
     assert len(records) == 1
     assert records[0].counterparty == 'Sender'
+
+
+STATS_XML = '''
+<report>
+  <transaction>
+    <t_from_my_client><from_person><first_name>S1</first_name></from_person></t_from_my_client>
+    <t_to_my_client>
+      <to_person>
+        <first_name>Bob</first_name>
+        <last_name>Receiver</last_name>
+        <birthdate>1980-02-02T00:00:00</birthdate>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>10</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+  </transaction>
+  <transaction>
+    <t_from_my_client><from_person><first_name>S2</first_name></from_person></t_from_my_client>
+    <t_to_my_client>
+      <to_person>
+        <first_name>Bob</first_name>
+        <last_name>Receiver</last_name>
+        <birthdate>1980-02-02T00:00:00</birthdate>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>20</amount_local>
+    <date_transaction>2023-01-02T00:00:00</date_transaction>
+  </transaction>
+  <transaction>
+    <t_from_my_client><from_person><first_name>S3</first_name></from_person></t_from_my_client>
+    <t_to_my_client>
+      <to_person>
+        <first_name>Bob</first_name>
+        <last_name>Receiver</last_name>
+        <birthdate>1980-02-02T00:00:00</birthdate>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>30</amount_local>
+    <date_transaction>2023-01-03T00:00:00</date_transaction>
+  </transaction>
+</report>
+'''
+
+
+def test_party_transaction_stats():
+    root = etree.fromstring(STATS_XML)
+    txs = root.findall('transaction')
+    records = party_transactions(txs, 'Bob', 'Receiver', '1980-02-02T00:00:00')
+    amounts = [r.tx_amount for r in records]
+    assert mean(amounts) == 20
+    assert median(amounts) == 20
 
 
 LABEL_XML = '''

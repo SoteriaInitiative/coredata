@@ -111,10 +111,12 @@ senders and receivers are identified even when transactions only reference
 accounts. The ``transactions`` command reports both incoming and outgoing
 payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
-The ``senders`` and ``receivers`` commands additionally show counts of incoming
-and outgoing transactions for each party, plus an ``Accounts`` column indicating
-how many distinct bank accounts are associated with each party. The ``multi-bank``
-command lists parties that hold accounts at more than one bank.
+ After the table the command also prints the final balance along with the mean
+ and median transaction amounts. The ``senders`` and ``receivers`` commands
+ additionally show counts of incoming and outgoing transactions for each party,
+ plus an ``Accounts`` column indicating how many distinct bank accounts are
+ associated with each party. The ``multi-bank`` command lists parties that hold
+ accounts at more than one bank.
 
 To serve these queries over HTTP—suitable for deployment on Cloud Run—start the
 built-in Flask application. The service listens on the port defined by the

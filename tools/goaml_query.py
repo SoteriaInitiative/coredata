@@ -55,6 +55,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from flask import Flask, jsonify, request
+from statistics import mean, median
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -738,7 +739,10 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
     ]
     _print_table(rows)
     if records:
+        amounts = [r.tx_amount for r in records]
         print(f"Final balance: {records[-1].running_balance:.2f}")
+        print(f"Average tx amount: {mean(amounts):.2f}")
+        print(f"Median tx amount: {median(amounts):.2f}")
 
 
 def _cmd_labels(args: argparse.Namespace) -> None:
