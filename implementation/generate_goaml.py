@@ -36,6 +36,8 @@ ACCOUNT_TYPE_MAP = {
 
 fake = Faker()
 
+LEGAL_FORMS = ["AG", "GmbH", "Inc", "Ltd"]
+
 
 def _build_address(parent, address):
     addr = etree.SubElement(parent, 'address')
@@ -57,6 +59,14 @@ def _build_person(parent, first_name, last_name, address, birthdate):
     _build_address(addresses, address)
 
 
+def _build_entity(parent, name, legal_form, address):
+    etree.SubElement(parent, 'name').text = name
+    etree.SubElement(parent, 'commercial_name').text = name
+    etree.SubElement(parent, 'incorporation_legal_form').text = legal_form
+    addresses = etree.SubElement(parent, 'addresses')
+    _build_address(addresses, address)
+
+
 def _build_account(parent, account, currency_code_local, day, tag):
     acc_el = etree.SubElement(parent, tag)
     etree.SubElement(acc_el, 'institution_name').text = account.get('bank_name', 'Dummy Bank')
@@ -69,20 +79,30 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'client_number').text = '000000'
     acc_type = ACCOUNT_TYPE_MAP.get(account.get('account_type', 'current'), '1')
     etree.SubElement(acc_el, 'account_type').text = acc_type
-    related = etree.SubElement(acc_el, 'related_persons')
-    arp = etree.SubElement(related, 'account_related_person')
-    tp = etree.SubElement(arp, 't_person')
-    addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-    _build_person(
-        tp,
-        account.get('first_name', 'Unknown'),
-        account.get('last_name', 'Unknown'),
-        addr,
-        account.get('birthdate', '1900-01-01T00:00:00'),
-    )
-    etree.SubElement(arp, 'role').text = '1'
-    rr = etree.SubElement(arp, 'relation_date_range')
-    etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+    if account.get('party_type') == 'entity':
+        related = etree.SubElement(acc_el, 'related_entities')
+        are = etree.SubElement(related, 'account_related_entity')
+        etree.SubElement(are, 'account_entity_relation').text = 'ACCCO'
+        ent = etree.SubElement(are, 'entity')
+        addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        _build_entity(ent, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
+        rr = etree.SubElement(are, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+    else:
+        related = etree.SubElement(acc_el, 'related_persons')
+        arp = etree.SubElement(related, 'account_related_person')
+        tp = etree.SubElement(arp, 't_person')
+        addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        _build_person(
+            tp,
+            account.get('first_name', 'Unknown'),
+            account.get('last_name', 'Unknown'),
+            addr,
+            account.get('birthdate', '1900-01-01T00:00:00'),
+        )
+        etree.SubElement(arp, 'role').text = '1'
+        rr = etree.SubElement(arp, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     etree.SubElement(acc_el, 'opened').text = f'{day}T00:00:00'
     etree.SubElement(acc_el, 'balance').text = f"{account.get('balance_after', 0):.2f}"
     etree.SubElement(acc_el, 'date_balance').text = f'{day}T00:00:00'
@@ -209,41 +229,72 @@ def group_by_party(sar_transactions, all_transactions):
 
 def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distribution):
     fake.unique.clear()
-    parties = []
+    parties = {}
     receivers = {}
     accounts = {b: {} for b in range(1, banks + 1)}
     multi_bank_count = 0
     for i in range(num_parties):
         pid = f'P{i+1}'
-        first, last = fake.first_name(), fake.last_name()
-        birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
         address = {
             'address': fake.street_address(),
             'city': fake.city(),
             'country_code': 'CH',
             'state': 'ZH',
         }
-        party_info = {
-            'id': pid,
-            'first_name': first,
-            'last_name': last,
-            'birthdate': birthdate,
-            'address': address,
-        }
-        parties.append(party_info)
+        if random.choice([True, False]):
+            party_type = 'person'
+            first, last = fake.first_name(), fake.last_name()
+            birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            party_info = {
+                'id': pid,
+                'type': 'person',
+                'first_name': first,
+                'last_name': last,
+                'birthdate': birthdate,
+                'address': address,
+            }
+        else:
+            party_type = 'entity'
+            legal_form = random.choice(LEGAL_FORMS)
+            name = f"{fake.last_name()} {legal_form}"
+            party_info = {
+                'id': pid,
+                'type': 'entity',
+                'name': name,
+                'legal_form': legal_form,
+                'address': address,
+            }
+        parties[pid] = party_info
 
-        recv_first = fake.first_name()
-        while recv_first == first:
+        if random.choice([True, False]):
+            recv_type = 'person'
             recv_first = fake.first_name()
-        recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-        while recv_birth == birthdate:
-            recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-        receivers[pid] = {
-            'first_name': recv_first,
-            'last_name': 'Unknown',
-            'birthdate': recv_birth,
-            'address': address,
-        }
+            if party_type == 'person':
+                while recv_first == party_info['first_name']:
+                    recv_first = fake.first_name()
+                recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+                while recv_birth == party_info['birthdate']:
+                    recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            else:
+                recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            receivers[pid] = {
+                'type': 'person',
+                'first_name': recv_first,
+                'last_name': 'Unknown',
+                'birthdate': recv_birth,
+                'address': address,
+            }
+        else:
+            recv_type = 'entity'
+            rform = random.choice(LEGAL_FORMS)
+            rname = f"{fake.last_name()} {rform}"
+            receivers[pid] = {
+                'type': 'entity',
+                'name': rname,
+                'legal_form': rform,
+                'address': address,
+            }
+
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
@@ -257,18 +308,27 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'bic': f'BIC{b}{i+1}',
                 'iban': f"CH{fake.unique.random_number(digits=19)}",
                 'account_type': random.choice(['current', 'business']),
-                'first_name': first,
-                'last_name': last,
-                'birthdate': birthdate,
                 'address': address,
                 'balance_after': 0.0,
                 'country_code': 'CH',
+                'party_type': party_type,
             }
+            if party_type == 'person':
+                acc.update({
+                    'first_name': party_info['first_name'],
+                    'last_name': party_info['last_name'],
+                    'birthdate': party_info['birthdate'],
+                })
+            else:
+                acc.update({
+                    'name': party_info['name'],
+                    'legal_form': party_info['legal_form'],
+                })
             accounts[b][pid] = acc
     return parties, receivers, accounts, multi_bank_count
 
 
-def generate_transactions_for_bank(bank_id, accounts, receivers, num_transactions, days_back, scenario_prob, bank_knows,
+def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_transactions, days_back, scenario_prob, bank_knows,
                                    std_multiplier, max_splits):
     transactions = []
     stats = {
@@ -287,6 +347,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, num_transaction
         party_id = random.choice(list(accounts.keys()))
         account = accounts[party_id]
         beneficiary = receivers[party_id]
+        originator = parties[party_id]
         if random.random() < scenario_prob:
             total_amount = threshold * random.uniform(1.0, 2.0)
             splits = random.randint(1, max_splits)
@@ -309,13 +370,14 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, num_transaction
                     'Transaction': {
                         'transaction_id': f'B{bank_id}T{tx_id}',
                         'transaction_originator': party_id,
+                        'originator': originator,
                         'transaction_type': 'deposit',
                         'transaction_unit_type': 'cash',
                         'currency_amount': amount,
                         'currency_code': 'CHF',
                         'timestamp': int(ts.timestamp() * 1000),
                         'account': account,
-                        'transaction_beneficiary': beneficiary['first_name'],
+                        'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')), 
                         'transaction_beneficiary_country_code': 'CH',
                         'beneficiary': beneficiary,
                         'local_label': local_label,
@@ -340,13 +402,14 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, num_transaction
                 'Transaction': {
                     'transaction_id': f'B{bank_id}T{tx_id}',
                     'transaction_originator': party_id,
+                    'originator': originator,
                     'transaction_type': 'deposit',
                     'transaction_unit_type': 'cash',
                     'currency_amount': round(amount, 2),
                     'currency_code': 'CHF',
                     'timestamp': int(ts.timestamp() * 1000),
                     'account': account,
-                    'transaction_beneficiary': beneficiary['first_name'],
+                    'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
                     'transaction_beneficiary_country_code': 'CH',
                     'beneficiary': beneficiary,
                     'local_label': 0,
@@ -389,6 +452,7 @@ def generate_reports(args):
             bank_id,
             accounts,
             receivers,
+            parties,
             args.transactions,
             args.days,
             scenario_prob,

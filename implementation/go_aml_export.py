@@ -72,34 +72,44 @@ ACCOUNT_TYPE_MAP = {
 }
 
 
-def _build_address(parent):
-    """Attach a dummy address required by the schema."""
+def _build_address(parent, address=None):
+    """Attach an address element."""
     addr = etree.SubElement(parent, 'address')
     etree.SubElement(addr, 'address_type').text = '1'
-    etree.SubElement(addr, 'address').text = 'Unknown'
-    etree.SubElement(addr, 'city').text = 'Unknown'
-    etree.SubElement(addr, 'country_code').text = 'CH'
-    etree.SubElement(addr, 'state').text = 'ZH'
+    address = address or {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'}
+    etree.SubElement(addr, 'address').text = address['address']
+    etree.SubElement(addr, 'city').text = address['city']
+    etree.SubElement(addr, 'country_code').text = address['country_code']
+    etree.SubElement(addr, 'state').text = address['state']
     return addr
 
 
-def _build_person(parent, first_name):
-    """Create a minimal t_person_my_client element with dummy values."""
+def _build_person(parent, info):
+    """Create a t_person or t_person_my_client element."""
     etree.SubElement(parent, 'gender').text = 'U'
-    etree.SubElement(parent, 'first_name').text = first_name
-    etree.SubElement(parent, 'last_name').text = 'Unknown'
-    etree.SubElement(parent, 'birthdate').text = '1900-01-01T00:00:00'
-    etree.SubElement(parent, 'nationality1').text = 'CH'
+    etree.SubElement(parent, 'first_name').text = info.get('first_name', 'Unknown')
+    etree.SubElement(parent, 'last_name').text = info.get('last_name', 'Unknown')
+    etree.SubElement(parent, 'birthdate').text = info.get('birthdate', '1900-01-01T00:00:00')
+    etree.SubElement(parent, 'nationality1').text = info.get('nationality', 'CH')
     addresses = etree.SubElement(parent, 'addresses')
-    _build_address(addresses)
+    _build_address(addresses, info.get('address'))
+
+
+def _build_entity(parent, info):
+    """Create a t_entity_my_client element."""
+    name = info.get('name', 'Dummy Corp')
+    etree.SubElement(parent, 'name').text = name
+    etree.SubElement(parent, 'commercial_name').text = name
+    etree.SubElement(parent, 'incorporation_legal_form').text = info.get('legal_form', 'AG')
+    addresses = etree.SubElement(parent, 'addresses')
+    _build_address(addresses, info.get('address'))
 
 
 def _build_account(parent, account, currency_code_local, day, tag):
-    """Create a t_account_my_client element with required dummy values."""
+    """Create a t_account_my_client element with required values."""
     acc_el = etree.SubElement(parent, tag)
     etree.SubElement(acc_el, 'institution_name').text = account.get('bank_name', 'Dummy Bank')
     etree.SubElement(acc_el, 'swift').text = account.get('bic', 'DUMMYBIC')
-    # institution_country is deprecated (maxOccurs=0) in schema 5.0
     etree.SubElement(acc_el, 'branch').text = 'ZH'
     etree.SubElement(acc_el, 'account_category').text = 'ACCNT'
     etree.SubElement(acc_el, 'account').text = account.get('account_id', '000000')
@@ -108,13 +118,22 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'client_number').text = '000000'
     acc_type = ACCOUNT_TYPE_MAP.get(str(account.get('account_type', '')).lower(), '14')
     etree.SubElement(acc_el, 'account_type').text = acc_type
-    related = etree.SubElement(acc_el, 'related_persons')
-    arp = etree.SubElement(related, 'account_related_person')
-    tp = etree.SubElement(arp, 't_person')
-    _build_person(tp, account.get('transaction_role', 'Person'))
-    etree.SubElement(arp, 'role').text = '1'
-    rr = etree.SubElement(arp, 'relation_date_range')
-    etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+    if account.get('party_type') == 'entity':
+        related = etree.SubElement(acc_el, 'related_entities')
+        are = etree.SubElement(related, 'account_related_entity')
+        etree.SubElement(are, 'account_entity_relation').text = 'ACCCO'
+        entity = etree.SubElement(are, 'entity')
+        _build_entity(entity, account)
+        rr = etree.SubElement(are, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+    else:
+        related = etree.SubElement(acc_el, 'related_persons')
+        arp = etree.SubElement(related, 'account_related_person')
+        tp = etree.SubElement(arp, 't_person')
+        _build_person(tp, account)
+        etree.SubElement(arp, 'role').text = '1'
+        rr = etree.SubElement(arp, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     etree.SubElement(acc_el, 'opened').text = f'{day}T00:00:00'
     etree.SubElement(acc_el, 'balance').text = f"{account.get('balance_after', 0):.2f}"
     etree.SubElement(acc_el, 'date_balance').text = f'{day}T00:00:00'
@@ -169,10 +188,14 @@ def build_report(originator, day, transactions, currency_code_local):
                 etree.SubElement(ffc, 'foreign_exchange_rate').text = str(
                     tdata['exchange_rate'].get('exchange_rate', 1)
                 )
-            fp = etree.SubElement(t_from, 'from_person')
-            tp = etree.SubElement(fp, 't_person')
-            _build_person(tp, tdata.get('transaction_originator', 'Unknown'))
-            from_country = tdata.get('account', {}).get('country_code', 'CH')
+            originator = tdata.get('originator', {})
+            if originator.get('type') == 'entity':
+                fe = etree.SubElement(t_from, 'from_entity')
+                _build_entity(fe, originator)
+            else:
+                fp = etree.SubElement(t_from, 'from_person')
+                _build_person(fp, originator)
+            from_country = originator.get('address', {}).get('country_code', tdata.get('account', {}).get('country_code', 'CH'))
             if from_country == 'UK':
                 from_country = 'GB'
             etree.SubElement(t_from, 'from_country').text = from_country
@@ -215,8 +238,13 @@ def build_report(originator, day, transactions, currency_code_local):
                 etree.SubElement(tfc, 'foreign_exchange_rate').text = str(
                     tdata['exchange_rate'].get('exchange_rate', 1)
                 )
-            to_person = etree.SubElement(t_to, 'to_person')
-            _build_person(to_person, tdata.get('transaction_beneficiary', 'Unknown'))
+            beneficiary = tdata.get('beneficiary', {})
+            if beneficiary.get('type') == 'entity':
+                to_entity = etree.SubElement(t_to, 'to_entity')
+                _build_entity(to_entity, beneficiary)
+            else:
+                to_person = etree.SubElement(t_to, 'to_person')
+                _build_person(to_person, beneficiary)
             to_country = tdata.get('transaction_beneficiary_country_code', 'CH')
             if to_country == 'UK':
                 to_country = 'GB'

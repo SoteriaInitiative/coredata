@@ -18,16 +18,17 @@ def test_cash_deposit_structure():
     )
     accounts = accounts_by_bank[1]
     txs, _ = generate_goaml.generate_transactions_for_bank(
-        1, accounts, receivers, num_transactions=100, days_back=30,
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=1.0, bank_knows=True, std_multiplier=2.0, max_splits=1
     )
     sar = [t for t in txs if t['Transaction']['local_label'] == 1]
     grouped = go_aml_export.group_by_party(sar, txs)
     originator, day = next(iter(grouped))
     report = go_aml_export.build_report(originator, day, grouped[(originator, day)], 'CHF')
+    go_aml_export.validate_report(report)
     tx_el = report.find('transaction')
     t_from = tx_el.find('t_from_my_client')
-    assert t_from.find('from_person') is not None
+    assert (t_from.find('from_person') is not None) ^ (t_from.find('from_entity') is not None)
     assert t_from.find('from_account') is None
     t_to = tx_el.find('t_to_my_client')
     to_account = t_to.find('to_account')

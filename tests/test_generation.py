@@ -32,14 +32,15 @@ def test_iban_uniqueness():
 
 def test_address_consistency():
     parties, receivers, accounts_by_bank = _generate_sample()
-    for p in parties:
-        pid = p['id']
+    for pid, p in parties.items():
         addr = p['address']
         recv = receivers[pid]
         assert recv['address'] == addr
-        assert recv['last_name'] == 'Unknown'
-        assert recv['first_name'] != p['first_name']
-        assert recv['birthdate'] != p['birthdate']
+        if recv['type'] == 'person':
+            assert recv['last_name'] == 'Unknown'
+            if p['type'] == 'person':
+                assert recv['first_name'] != p['first_name']
+                assert recv['birthdate'] != p['birthdate']
         for bank_accounts in accounts_by_bank.values():
             if pid in bank_accounts:
                 assert bank_accounts[pid]['address'] == addr
@@ -49,7 +50,7 @@ def test_account_balance_and_receiver_address():
     parties, receivers, accounts_by_bank = _generate_sample()
     accounts = accounts_by_bank[1]
     txs, stats = generate_goaml.generate_transactions_for_bank(
-        1, accounts, receivers, num_transactions=100, days_back=30,
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
     )
     sums = defaultdict(float)
@@ -59,7 +60,8 @@ def test_account_balance_and_receiver_address():
         sums[acc['account_id']] += tdata['currency_amount']
         ben = tdata['beneficiary']
         assert ben['address'] == acc['address']
-        assert ben['last_name'] == 'Unknown'
+        if ben['type'] == 'person':
+            assert ben['last_name'] == 'Unknown'
 
     for acc in accounts.values():
         assert acc['balance_after'] == round(sums.get(acc['account_id'], 0.0), 2)
@@ -69,7 +71,7 @@ def test_large_cash_local_label():
     parties, receivers, accounts_by_bank = _generate_sample()
     accounts = accounts_by_bank[1]
     txs, _ = generate_goaml.generate_transactions_for_bank(
-        1, accounts, receivers, num_transactions=100, days_back=30,
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=1.0, bank_knows=True, std_multiplier=2.0, max_splits=3
     )
     threshold = 1000 + 2.0 * 200
@@ -84,7 +86,7 @@ def test_large_cash_local_label():
     parties2, receivers2, accounts_by_bank2 = _generate_sample()
     accounts2 = accounts_by_bank2[1]
     txs2, _ = generate_goaml.generate_transactions_for_bank(
-        1, accounts2, receivers2, num_transactions=100, days_back=30,
+        1, accounts2, receivers2, parties2, num_transactions=100, days_back=30,
         scenario_prob=1.0, bank_knows=False, std_multiplier=2.0, max_splits=3
     )
     for tx in txs2:
