@@ -464,7 +464,6 @@ def party_transactions(
     """
 
     records: List[TransactionRecord] = []
-    balance = start_balance
     target_name = f"{first_name} {last_name}".strip()
     for tx in transactions:
         labels = _parse_labels(tx)
@@ -480,7 +479,6 @@ def party_transactions(
                 continue
             balance_amount = tx.findtext("t_to_my_client/to_account/balance")
             balance_amount = float(balance_amount) if balance_amount else None
-            balance += amount
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
@@ -489,7 +487,6 @@ def party_transactions(
                     counterparty=sender.name,
                     direction="in",
                     bank=bank_id,
-                    running_balance=balance,
                     local_label=labels["local_label"],
                     global_label=labels["global_label"],
                 )
@@ -503,7 +500,6 @@ def party_transactions(
                 continue
             balance_amount = tx.findtext("t_from_my_client/from_account/balance")
             balance_amount = float(balance_amount) if balance_amount else None
-            balance -= amount
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
@@ -512,12 +508,19 @@ def party_transactions(
                     counterparty=receiver.name,
                     direction="out",
                     bank=bank_id,
-                    running_balance=balance,
                     local_label=labels["local_label"],
                     global_label=labels["global_label"],
                 )
             )
+
     records.sort(key=lambda r: r.timestamp)
+    balance = start_balance
+    for r in records:
+        if r.direction == "in":
+            balance += r.tx_amount
+        else:
+            balance -= r.tx_amount
+        r.running_balance = balance
     return records
 
 
