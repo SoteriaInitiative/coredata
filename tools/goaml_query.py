@@ -54,7 +54,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from flask import Flask, jsonify, request
 from statistics import mean, median
 
 from google.cloud import storage
@@ -117,62 +116,6 @@ class MultiBankParty:
 
     party: Party
     banks: List[str]
-
-
-def _party_to_dict(party: Party) -> Dict[str, Any]:
-    """Serialize a :class:`Party` to a plain dictionary."""
-
-    return {
-        "name": party.name,
-        "dob": party.dob,
-        "bank": party.bank,
-        "address": party.address,
-        "iban": party.iban,
-    }
-
-
-def _ptc_to_dict(stats: PartyTxCounts) -> Dict[str, Any]:
-    """Serialize :class:`PartyTxCounts` for JSON responses."""
-
-    data = _party_to_dict(stats.party)
-    data.update(
-        {
-            "incoming": stats.incoming,
-            "outgoing": stats.outgoing,
-            "accounts": stats.account_count,
-        }
-    )
-    return data
-
-
-def _tx_to_dict(record: TransactionRecord) -> Dict[str, Any]:
-    """Serialize :class:`TransactionRecord` for JSON responses."""
-
-    return {
-        "timestamp": record.timestamp.isoformat(),
-        "tx_amount": record.tx_amount,
-        "balance_amount": record.balance_amount,
-        "counterparty": record.counterparty,
-        "direction": record.direction,
-        "bank": record.bank,
-        "running_balance": record.running_balance,
-        "local_label": record.local_label,
-        "global_label": record.global_label,
-    }
-
-
-def _labeled_to_dict(record: LabeledTransaction) -> Dict[str, Any]:
-    """Serialize :class:`LabeledTransaction` for JSON responses."""
-
-    return {
-        "timestamp": record.timestamp.isoformat(),
-        "amount": record.amount,
-        "sender": record.sender,
-        "receiver": record.receiver,
-        "bank": record.bank,
-        "local_label": record.local_label,
-        "global_label": record.global_label,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -595,82 +538,6 @@ def _print_table(rows: List[Dict[str, Any]]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cloud Run application
-# ---------------------------------------------------------------------------
-
-
-def create_app() -> Flask:
-    """Create a Flask application exposing query endpoints."""
-
-    app = Flask(__name__)
-
-    @app.get("/senders")
-    def http_senders() -> Any:
-        txs = load_transactions()
-        data = [_ptc_to_dict(p) for p in unique_parties(txs, "sending")]
-        return jsonify(data)
-
-    @app.get("/receivers")
-    def http_receivers() -> Any:
-        txs = load_transactions()
-        data = [_ptc_to_dict(p) for p in unique_parties(txs, "receiving")]
-        return jsonify(data)
-
-    @app.get("/receivers-for")
-    def http_receivers_for() -> Any:
-        name = request.args.get("name")
-        if not name:
-            return jsonify({"error": "name required"}), 400
-        txs = load_transactions()
-        data = [_party_to_dict(p) for p in related_parties(txs, name, "sending")]
-        return jsonify(data)
-
-    @app.get("/senders-for")
-    def http_senders_for() -> Any:
-        name = request.args.get("name")
-        if not name:
-            return jsonify({"error": "name required"}), 400
-        txs = load_transactions()
-        data = [_party_to_dict(p) for p in related_parties(txs, name, "receiving")]
-        return jsonify(data)
-
-    @app.get("/transactions")
-    def http_transactions() -> Any:
-        first = request.args.get("first_name")
-        last = request.args.get("last_name")
-        dob = request.args.get("dob")
-        if not (first and last and dob):
-            return jsonify({"error": "first_name, last_name and dob required"}), 400
-        bank = request.args.get("bank")
-        start_balance = float(request.args.get("start_balance", "0"))
-        txs = load_transactions()
-        records = party_transactions(
-            txs, first, last, dob, bank=bank, start_balance=start_balance
-        )
-        return jsonify([_tx_to_dict(r) for r in records])
-
-    @app.get("/labels")
-    def http_labels() -> Any:
-        scope = request.args.get("scope", "local")
-        txs = load_transactions()
-        records = labelled_transactions(txs, scope)
-        return jsonify([_labeled_to_dict(r) for r in records])
-
-    @app.get("/multi-bank")
-    def http_multibank() -> Any:
-        txs = load_transactions()
-        parties = [
-            {**_party_to_dict(mb.party), "banks": mb.banks} for mb in multibank_parties(txs)
-        ]
-        return jsonify(parties)
-
-    return app
-
-
-app = create_app()
-
-
-# ---------------------------------------------------------------------------
 # Command line interface
 # ---------------------------------------------------------------------------
 
@@ -779,13 +646,6 @@ def _cmd_multibank(args: argparse.Namespace) -> None:
     _print_table(rows)
 
 
-def _cmd_serve(args: argparse.Namespace) -> None:
-    """Run the Flask application (useful for Cloud Run)."""
-
-    port = int(os.getenv("PORT", "8080"))
-    app.run(host="0.0.0.0", port=port)
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command")
@@ -845,9 +705,6 @@ def build_parser() -> argparse.ArgumentParser:
         "multi-bank", help="List parties with accounts at multiple banks"
     )
     multi_cmd.set_defaults(func=_cmd_multibank)
-
-    serve_cmd = sub.add_parser("serve", help="Run HTTP server for Cloud Run")
-    serve_cmd.set_defaults(func=_cmd_serve)
 
     return parser
 

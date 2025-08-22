@@ -1,5 +1,4 @@
 google-cloud-storage
-flask
 numpy
 python-dotenv
 requests
