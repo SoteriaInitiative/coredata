@@ -104,7 +104,8 @@ python tools/goaml_query.py labels --scope both
 python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
 ```
 The ``transactions`` command now reports both incoming and outgoing payments for
-the given party and calculates the running balance.
+the given party and displays transaction amount, account balance amount,
+running balance, and the local and global label flags for each record.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 

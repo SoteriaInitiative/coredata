@@ -74,11 +74,14 @@ class TransactionRecord:
     """Simplified view of a party transaction."""
 
     timestamp: datetime
-    amount: float
+    tx_amount: float
+    balance_amount: Optional[float]
     counterparty: str
     direction: str  # "in" for incoming funds, "out" for outgoing
     bank: Optional[str]
-    balance_after: Optional[float] = None
+    running_balance: Optional[float] = None
+    local_label: int = 0
+    global_label: int = 0
 
 
 @dataclass
@@ -271,6 +274,7 @@ def party_transactions(
     records: List[TransactionRecord] = []
     balance = start_balance
     for tx in transactions:
+        labels = _parse_labels(tx)
         # Check receiving side
         person_el = _unwrap_person_el(tx.find("t_to_my_client/to_person"))
         first = person_el.findtext("first_name", "").strip() if person_el is not None else ""
@@ -286,6 +290,8 @@ def party_transactions(
             if bank is not None and bank_id != bank:
                 continue
             amount = float(tx.findtext("amount_local") or 0)
+            balance_amount = tx.findtext("t_to_my_client/to_account/balance")
+            balance_amount = float(balance_amount) if balance_amount else None
             balance += amount
             counterparty = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
             ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
@@ -293,11 +299,14 @@ def party_transactions(
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
-                    amount=amount,
+                    tx_amount=amount,
+                    balance_amount=balance_amount,
                     counterparty=counterparty.name,
                     direction="in",
                     bank=bank_id,
-                    balance_after=balance,
+                    running_balance=balance,
+                    local_label=labels["local_label"],
+                    global_label=labels["global_label"],
                 )
             )
             continue
@@ -316,6 +325,8 @@ def party_transactions(
             if bank is not None and bank_id != bank:
                 continue
             amount = float(tx.findtext("amount_local") or 0)
+            balance_amount = tx.findtext("t_from_my_client/from_account/balance")
+            balance_amount = float(balance_amount) if balance_amount else None
             balance -= amount
             counterparty = _extract_party_from_person_el(
                 tx.find("t_to_my_client/to_person"),
@@ -327,11 +338,14 @@ def party_transactions(
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
-                    amount=amount,
+                    tx_amount=amount,
+                    balance_amount=balance_amount,
                     counterparty=counterparty.name,
                     direction="out",
                     bank=bank_id,
-                    balance_after=balance,
+                    running_balance=balance,
+                    local_label=labels["local_label"],
+                    global_label=labels["global_label"],
                 )
             )
     records.sort(key=lambda r: r.timestamp)
@@ -462,17 +476,20 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
     rows = [
         {
             "Timestamp": r.timestamp.isoformat(),
-            "Amount": f"{r.amount:.2f}",
+            "Tx Amount": f"{r.tx_amount:.2f}",
+            "Balance Amount": f"{r.balance_amount:.2f}" if r.balance_amount is not None else "",
+            "Running Balance": f"{r.running_balance:.2f}" if r.running_balance is not None else "",
             "Counterparty": r.counterparty,
             "Direction": r.direction,
             "Bank": r.bank or "",
-            "Balance": f"{r.balance_after:.2f}" if r.balance_after is not None else "",
+            "Local Label": r.local_label,
+            "Global Label": r.global_label,
         }
         for r in records
     ]
     _print_table(rows)
     if records:
-        print(f"Final balance: {records[-1].balance_after:.2f}")
+        print(f"Final balance: {records[-1].running_balance:.2f}")
 
 
 def _cmd_labels(args: argparse.Namespace) -> None:

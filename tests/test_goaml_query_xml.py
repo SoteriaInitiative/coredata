@@ -13,6 +13,7 @@ SAMPLE_XML = '''
       <from_account>
         <institution_name>BankA</institution_name>
         <iban>IBAN1</iban>
+        <balance>900.0</balance>
         <related_persons>
           <account_related_person>
             <t_person>
@@ -47,6 +48,7 @@ SAMPLE_XML = '''
       <to_account>
         <institution_name>BankB</institution_name>
         <iban>IBAN2</iban>
+        <balance>1100.0</balance>
       </to_account>
     </t_to_my_client>
     <amount_local>100.0</amount_local>
@@ -82,8 +84,11 @@ def test_related_and_transactions():
     assert len(records) == 1
     assert records[0].counterparty == 'Alice Sender'
     assert records[0].direction == 'in'
-    assert records[0].amount == 100.0
-    assert records[0].balance_after == 110.0
+    assert records[0].tx_amount == 100.0
+    assert records[0].balance_amount == 1100.0
+    assert records[0].running_balance == 110.0
+    assert records[0].local_label == 1
+    assert records[0].global_label == 1
     # Outgoing for Alice
     records = party_transactions(
         txs,
@@ -95,8 +100,11 @@ def test_related_and_transactions():
     assert len(records) == 1
     assert records[0].counterparty == 'Bob Receiver'
     assert records[0].direction == 'out'
-    assert records[0].amount == 100.0
-    assert records[0].balance_after == -90.0
+    assert records[0].tx_amount == 100.0
+    assert records[0].balance_amount == 900.0
+    assert records[0].running_balance == -90.0
+    assert records[0].local_label == 1
+    assert records[0].global_label == 1
 
 
 NESTED_XML = '''
