@@ -2,6 +2,7 @@ import os
 import sys
 import random
 from collections import defaultdict
+from datetime import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from implementation import generate_goaml
@@ -115,3 +116,21 @@ def test_large_cash_local_label():
     )
     for tx in txs2:
         assert tx['Transaction']['local_label'] == 0
+
+
+def test_group_by_party_collects_all_same_day_transactions():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
+    )
+    grouped = generate_goaml.group_by_party(txs)
+    for (originator, day), tx_list in grouped.items():
+        count_in_all = sum(
+            1
+            for t in txs
+            if t['Transaction']['transaction_originator'] == originator
+            and datetime.utcfromtimestamp(t['Transaction']['timestamp'] / 1000).strftime('%Y-%m-%d') == day
+        )
+        assert len(tx_list) == count_in_all

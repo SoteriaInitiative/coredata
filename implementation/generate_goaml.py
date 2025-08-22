@@ -249,19 +249,13 @@ def upload_report(xml_bytes, destination):
         pass
 
 
-def group_by_party(sar_transactions, all_transactions):
-    index = defaultdict(list)
-    for tx in all_transactions:
+def group_by_party(transactions):
+    grouped = defaultdict(list)
+    for tx in transactions:
         tdata = tx['Transaction']
         originator = tdata.get('transaction_originator')
         day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
-        index[(originator, day)].append(tx)
-    grouped = {}
-    for tx in sar_transactions:
-        tdata = tx['Transaction']
-        originator = tdata.get('transaction_originator')
-        day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
-        grouped[(originator, day)] = index[(originator, day)]
+        grouped[(originator, day)].append(tx)
     return grouped
 
 
@@ -560,8 +554,7 @@ def generate_reports(args):
             global_stats['distribution'][key] += bank_stats['distribution'][key]
         for key in global_stats['labels']:
             global_stats['labels'][key] += bank_stats['labels'][key]
-        sar_transactions = [t for t in txs if t['Transaction']['local_label'] == 1]
-        grouped = group_by_party(sar_transactions, txs)
+        grouped = group_by_party(txs)
         for (originator, day), group in grouped.items():
             for i in range(0, len(group), 1000):
                 chunk = group[i:i + 1000]
