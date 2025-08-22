@@ -85,10 +85,11 @@ def test_account_balance_and_receiver_address():
             assert ben['last_name'] != 'Unknown'
 
     for acc in accounts.values():
-        assert acc['balance_after'] == round(sums_sender.get(acc['account_id'], 0.0), 2)
+        expected = round(acc['initial_balance'] + sums_sender.get(acc['account_id'], 0.0), 2)
+        assert acc['balance_after'] == expected
     for recv in receivers.values():
         r_acc = recv['account']
-        expected = round(sums_receiver.get(r_acc['account_id'], 0.0), 2)
+        expected = round(r_acc['initial_balance'] + sums_receiver.get(r_acc['account_id'], 0.0), 2)
         assert r_acc['balance_after'] == expected
 
 
@@ -134,3 +135,36 @@ def test_group_by_party_collects_all_same_day_transactions():
             and datetime.utcfromtimestamp(t['Transaction']['timestamp'] / 1000).strftime('%Y-%m-%d') == day
         )
         assert len(tx_list) == count_in_all
+
+
+def test_account_balance_invariant():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
+    )
+    acc_map = {acc['account_id']: acc for acc in accounts.values()}
+    for recv in receivers.values():
+        acc_map[recv['account']['account_id']] = recv['account']
+    totals = defaultdict(float)
+    for tx in txs:
+        amt = tx['Transaction']['currency_amount']
+        totals[tx['Transaction']['account']['account_id']] += amt
+        totals[tx['Transaction']['beneficiary_account']['account_id']] += amt
+    for acc_id, acc in acc_map.items():
+        diff = acc['balance_after'] - acc['initial_balance']
+        assert round(diff, 2) == round(totals.get(acc_id, 0.0), 2)
+
+
+def test_report_validates_against_xsd():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
+    )
+    grouped = generate_goaml.group_by_party(txs)
+    (originator, day), tx_list = next(iter(grouped.items()))
+    report = generate_goaml.build_report(1, originator, day, tx_list, 'CHF')
+    generate_goaml.validate_report(report)

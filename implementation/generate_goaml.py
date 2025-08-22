@@ -342,6 +342,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'last_name': recv_last,
                 'birthdate': recv_birth,
                 'party_type': 'person',
+                'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
             }
         else:
@@ -364,6 +365,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'name': rname,
                 'legal_form': rform,
                 'party_type': 'entity',
+                'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
             }
             has_entity_receiver = True
@@ -384,6 +386,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'iban': f"CH{fake.unique.random_number(digits=19)}",
                 'account_type': random.choice(['current', 'business']),
                 'address': address,
+                'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
                 'country_code': 'CH',
                 'party_type': party_type,
@@ -506,11 +509,13 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
         r_acc = tx['Transaction']['beneficiary_account']
         sums_receiver[r_acc['account_id']] += amount
     for acc in accounts.values():
-        acc['balance_after'] = round(sums_sender.get(acc['account_id'], 0.0), 2)
+        acc['balance_after'] = round(
+            acc['initial_balance'] + sums_sender.get(acc['account_id'], 0.0), 2
+        )
     for recv in receivers.values():
         r_acc = recv['account']
         r_acc['balance_after'] = round(
-            r_acc.get('balance_after', 0.0) + sums_receiver.get(r_acc['account_id'], 0.0), 2
+            r_acc['initial_balance'] + sums_receiver.get(r_acc['account_id'], 0.0), 2
         )
     return transactions, stats
 
@@ -559,7 +564,6 @@ def generate_reports(args):
             for i in range(0, len(group), 1000):
                 chunk = group[i:i + 1000]
                 report = build_report(bank_id, originator, day, chunk, 'CHF')
-                validate_report(report)
                 verify_content(chunk, report)
                 xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)
                 filename = f'Bank_{bank_id}_LargeCashDeposit_{originator}_{day}_{timestamp}_{i//1000 + 1}.xml'

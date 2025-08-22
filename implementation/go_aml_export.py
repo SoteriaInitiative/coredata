@@ -8,6 +8,7 @@ import logging
 from lxml import etree
 import xmlschema
 from faker import Faker
+from . import generate_goaml
 
 try:  # pragma: no cover - handled in tests
     from .google_storage_utils import gs_utils
@@ -111,9 +112,13 @@ def _build_entity(parent, info):
     name = info.get('name', 'Dummy Corp')
     etree.SubElement(parent, 'name').text = name
     etree.SubElement(parent, 'commercial_name').text = name
-    etree.SubElement(parent, 'incorporation_legal_form').text = info.get('legal_form', 'AG')
+    form = info.get('legal_form', 'AG')
+    form_code = generate_goaml.LEGAL_FORM_CODES.get(form, '1')
+    etree.SubElement(parent, 'incorporation_legal_form').text = form_code
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, info.get('address'))
+    etree.SubElement(parent, 'incorporation_country_code').text = info.get('address', {}).get('country_code', 'CH')
+    etree.SubElement(parent, 'tax_reg_number').text = 'Yes'
 
 
 def _build_account(parent, account, currency_code_local, day, tag):
@@ -136,6 +141,13 @@ def _build_account(parent, account, currency_code_local, day, tag):
         entity = etree.SubElement(are, 'entity')
         _build_entity(entity, account)
         rr = etree.SubElement(are, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+        related_persons = etree.SubElement(acc_el, 'related_persons')
+        arp = etree.SubElement(related_persons, 'account_related_person')
+        tp = etree.SubElement(arp, 't_person')
+        _build_person(tp, account)
+        etree.SubElement(arp, 'role').text = '1'
+        rr = etree.SubElement(arp, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     else:
         related = etree.SubElement(acc_el, 'related_persons')
