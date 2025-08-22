@@ -37,6 +37,12 @@ ACCOUNT_TYPE_MAP = {
 fake = Faker()
 
 LEGAL_FORMS = ["AG", "GmbH", "Inc", "Ltd"]
+LEGAL_FORM_CODES = {
+    "AG": "6",
+    "GmbH": "7",
+    "Inc": "13",
+    "Ltd": "14",
+}
 
 
 def _build_address(parent, address):
@@ -62,9 +68,10 @@ def _build_person(parent, first_name, last_name, address, birthdate):
 def _build_entity(parent, name, legal_form, address):
     etree.SubElement(parent, 'name').text = name
     etree.SubElement(parent, 'commercial_name').text = name
-    etree.SubElement(parent, 'incorporation_legal_form').text = legal_form
+    etree.SubElement(parent, 'incorporation_legal_form').text = LEGAL_FORM_CODES.get(legal_form, '1')
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
+    etree.SubElement(parent, 'incorporation_country_code').text = address.get('country_code', 'CH')
 
 
 def _build_account(parent, account, currency_code_local, day, tag):
@@ -80,13 +87,27 @@ def _build_account(parent, account, currency_code_local, day, tag):
     acc_type = ACCOUNT_TYPE_MAP.get(account.get('account_type', 'current'), '1')
     etree.SubElement(acc_el, 'account_type').text = acc_type
     if account.get('party_type') == 'entity':
-        related = etree.SubElement(acc_el, 'related_entities')
-        are = etree.SubElement(related, 'account_related_entity')
+        related_entities = etree.SubElement(acc_el, 'related_entities')
+        are = etree.SubElement(related_entities, 'account_related_entity')
         etree.SubElement(are, 'account_entity_relation').text = 'ACCCO'
         ent = etree.SubElement(are, 'entity')
         addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
         _build_entity(ent, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
         rr = etree.SubElement(are, 'relation_date_range')
+        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+        # XSD requires at least one related_person entry even for entity accounts
+        related_persons = etree.SubElement(acc_el, 'related_persons')
+        arp = etree.SubElement(related_persons, 'account_related_person')
+        tp = etree.SubElement(arp, 't_person')
+        _build_person(
+            tp,
+            account.get('first_name', 'Unknown'),
+            account.get('last_name', 'Unknown'),
+            addr,
+            account.get('birthdate', '1900-01-01T00:00:00'),
+        )
+        etree.SubElement(arp, 'role').text = '1'
+        rr = etree.SubElement(arp, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     else:
         related = etree.SubElement(acc_el, 'related_persons')
@@ -241,59 +262,32 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
             'country_code': 'CH',
             'state': 'ZH',
         }
-        if random.choice([True, False]):
-            party_type = 'person'
-            first, last = fake.first_name(), fake.last_name()
-            birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-            party_info = {
-                'id': pid,
-                'type': 'person',
-                'first_name': first,
-                'last_name': last,
-                'birthdate': birthdate,
-                'address': address,
-            }
-        else:
-            party_type = 'entity'
-            legal_form = random.choice(LEGAL_FORMS)
-            name = f"{fake.last_name()} {legal_form}"
-            party_info = {
-                'id': pid,
-                'type': 'entity',
-                'name': name,
-                'legal_form': legal_form,
-                'address': address,
-            }
+        party_type = 'person'
+        first, last = fake.first_name(), fake.last_name()
+        birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+        party_info = {
+            'id': pid,
+            'type': 'person',
+            'first_name': first,
+            'last_name': last,
+            'birthdate': birthdate,
+            'address': address,
+        }
         parties[pid] = party_info
 
-        if random.choice([True, False]):
-            recv_type = 'person'
+        recv_first = fake.first_name()
+        while recv_first == party_info['first_name']:
             recv_first = fake.first_name()
-            if party_type == 'person':
-                while recv_first == party_info['first_name']:
-                    recv_first = fake.first_name()
-                recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-                while recv_birth == party_info['birthdate']:
-                    recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-            else:
-                recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-            receivers[pid] = {
-                'type': 'person',
-                'first_name': recv_first,
-                'last_name': 'Unknown',
-                'birthdate': recv_birth,
-                'address': address,
-            }
-        else:
-            recv_type = 'entity'
-            rform = random.choice(LEGAL_FORMS)
-            rname = f"{fake.last_name()} {rform}"
-            receivers[pid] = {
-                'type': 'entity',
-                'name': rname,
-                'legal_form': rform,
-                'address': address,
-            }
+        recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+        while recv_birth == party_info['birthdate']:
+            recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+        receivers[pid] = {
+            'type': 'person',
+            'first_name': recv_first,
+            'last_name': 'Unknown',
+            'birthdate': recv_birth,
+            'address': address,
+        }
 
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
