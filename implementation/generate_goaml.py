@@ -132,7 +132,7 @@ def _build_account(parent, account, currency_code_local, day, tag):
     return acc_el
 
 
-def build_report(bank_id, scenario, originator, day, transactions, currency_code_local):
+def build_report(bank_id, originator, day, transactions, currency_code_local):
     report = etree.Element('report')
     etree.SubElement(report, 'rentity_id').text = '1'
     etree.SubElement(report, 'rentity_branch').text = 'HO'
@@ -157,30 +157,54 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
         tdata = tx['Transaction']
         tx_el = etree.SubElement(report, 'transaction')
         etree.SubElement(tx_el, 'transactionnumber').text = tdata['transaction_id']
-        etree.SubElement(tx_el, 'transaction_description').text = scenario
+
+        loc_type = random.choice(['ATM', 'Counter'])
+        loc_id = fake.bothify('????####')
+        loc_addr = f"{fake.street_address()}, {fake.city()}"
+        etree.SubElement(tx_el, 'transaction_location').text = f"{loc_type} {loc_id} {loc_addr}"
+        etree.SubElement(tx_el, 'transaction_description').text = 'Cash Deposit'
+
         date_str = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
         etree.SubElement(tx_el, 'date_transaction').text = f'{date_str}T00:00:00'
         etree.SubElement(tx_el, 'value_date').text = f'{date_str}T00:00:00'
         tx_code = TYPE_MAP.get(tdata.get('transaction_type', 'deposit'), 'CASHT')
         etree.SubElement(tx_el, 'transaction_type_code').text = tx_code
         etree.SubElement(tx_el, 'amount_local').text = f"{tdata.get('currency_amount', 0):.2f}"
-        funds_code = FUNDS_TYPE_MAP.get(tdata.get('transaction_unit_type', 'cash'), '26')
 
         t_from = etree.SubElement(tx_el, 't_from_my_client')
-        etree.SubElement(t_from, 'from_funds_code').text = funds_code
+        etree.SubElement(t_from, 'from_funds_code').text = FUNDS_TYPE_MAP['cash']
         ffc = etree.SubElement(t_from, 'from_foreign_currency')
         etree.SubElement(ffc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(ffc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
-        _build_account(t_from, tdata.get('account', {}), currency_code_local, date_str, 'from_account')
-        etree.SubElement(t_from, 'from_country').text = tdata.get('account', {}).get('country_code', 'CH')
+        origin = tdata.get('originator', {})
+        if origin.get('type') == 'entity':
+            fe = etree.SubElement(t_from, 'from_entity')
+            _build_entity(fe, origin.get('name', 'Unknown'), origin.get('legal_form', 'AG'), origin.get('address', {}))
+        else:
+            fp = etree.SubElement(t_from, 'from_person')
+            _build_person(
+                fp,
+                origin.get('first_name', 'Unknown'),
+                origin.get('last_name', 'Unknown'),
+                origin.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'}),
+                origin.get('birthdate', '1900-01-01T00:00:00'),
+            )
+        etree.SubElement(t_from, 'from_country').text = origin.get('address', {}).get('country_code', 'CH')
 
         t_to = etree.SubElement(tx_el, 't_to_my_client')
-        etree.SubElement(t_to, 'to_funds_code').text = funds_code
+        etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['currency']
         tfc = etree.SubElement(t_to, 'to_foreign_currency')
         etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
-        _build_account(t_to, tdata.get('beneficiary_account', {}), currency_code_local, date_str, 'to_account')
-        etree.SubElement(t_to, 'to_country').text = tdata.get('transaction_beneficiary_country_code', 'CH')
+        _build_account(
+            t_to,
+            tdata.get('beneficiary_account', tdata.get('account', {})),
+            currency_code_local,
+            date_str,
+            'to_account',
+        )
+        to_acc = tdata.get('beneficiary_account', tdata.get('account', {}))
+        etree.SubElement(t_to, 'to_country').text = to_acc.get('country_code', 'CH')
 
         comments = etree.SubElement(tx_el, 'comments')
         comments.text = f"local_label={tdata.get('local_label',0)};global_label={tdata.get('global_label',0)}"
@@ -474,7 +498,7 @@ def generate_reports(args):
         for (originator, day), group in grouped.items():
             for i in range(0, len(group), 1000):
                 chunk = group[i:i + 1000]
-                report = build_report(bank_id, 'LargeCashDeposit', originator, day, chunk, 'CHF')
+                report = build_report(bank_id, originator, day, chunk, 'CHF')
                 validate_report(report)
                 verify_content(chunk, report)
                 xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)

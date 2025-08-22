@@ -10,6 +10,7 @@ from implementation import generate_goaml, go_aml_export
 def setup_module(module):
     random.seed(0)
     generate_goaml.fake.seed_instance(0)
+    go_aml_export.fake.seed_instance(0)
 
 
 def test_cash_deposit_structure():
@@ -34,3 +35,6 @@ def test_cash_deposit_structure():
     to_account = t_to.find('to_account')
     assert to_account is not None
     assert to_account.findtext('iban')
+    assert tx_el.findtext('transaction_description') == 'Cash Deposit'
+    loc = tx_el.findtext('transaction_location')
+    assert loc.startswith('ATM') or loc.startswith('Counter')

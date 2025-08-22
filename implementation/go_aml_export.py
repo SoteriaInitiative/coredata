@@ -1,11 +1,13 @@
 import json
 import os
+import random
 from collections import defaultdict
 from datetime import datetime
 import logging
 
 from lxml import etree
 import xmlschema
+from faker import Faker
 
 try:  # pragma: no cover - handled in tests
     from .google_storage_utils import gs_utils
@@ -15,6 +17,8 @@ except ImportError:  # pragma: no cover
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+fake = Faker()
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), '..', 'standard', 'XML_Schema.xsd')
 
@@ -168,7 +172,11 @@ def build_report(originator, day, transactions, currency_code_local):
         tdata = tx['Transaction']
         tx_el = etree.SubElement(report, 'transaction')
         etree.SubElement(tx_el, 'transactionnumber').text = tdata['transaction_id']
-        etree.SubElement(tx_el, 'transaction_description').text = str(tdata.get('global_label', 'Transaction'))
+        loc_type = random.choice(['ATM', 'Counter'])
+        loc_id = fake.bothify('????####')
+        loc_addr = f"{fake.street_address()}, {fake.city()}"
+        etree.SubElement(tx_el, 'transaction_location').text = f"{loc_type} {loc_id} {loc_addr}"
+        etree.SubElement(tx_el, 'transaction_description').text = 'Cash Deposit'
         date_str = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
         etree.SubElement(tx_el, 'date_transaction').text = f'{date_str}T00:00:00'
         etree.SubElement(tx_el, 'value_date').text = f'{date_str}T00:00:00'
