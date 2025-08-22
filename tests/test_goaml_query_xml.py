@@ -89,6 +89,97 @@ def test_related_and_transactions():
     assert records[0].running_balance == 110.0
     assert records[0].local_label == 1
     assert records[0].global_label == 1
+
+
+INVOLVED_XML = '''
+<report>
+  <transaction>
+    <involved_parties>
+      <party>
+        <role>1</role>
+        <account_my_client>
+          <institution_name>BankA</institution_name>
+          <iban>IBAN1</iban>
+          <related_persons>
+            <account_related_person>
+              <t_person>
+                <first_name>Alice</first_name>
+                <last_name>Sender</last_name>
+                <birthdate>1970-01-01T00:00:00</birthdate>
+                <addresses>
+                  <address>
+                    <address>Street1</address>
+                    <city>City1</city>
+                    <country_code>CH</country_code>
+                  </address>
+                </addresses>
+              </t_person>
+            </account_related_person>
+          </related_persons>
+        </account_my_client>
+      </party>
+      <party>
+        <role>2</role>
+        <account>
+          <institution_name>BankB</institution_name>
+          <iban>IBAN2</iban>
+          <related_persons>
+            <account_related_person>
+              <t_person>
+                <first_name>Bob</first_name>
+                <last_name>Receiver</last_name>
+                <birthdate>1980-02-02T00:00:00</birthdate>
+                <addresses>
+                  <address>
+                    <address>Street2</address>
+                    <city>City2</city>
+                    <country_code>CH</country_code>
+                  </address>
+                </addresses>
+              </t_person>
+            </account_related_person>
+          </related_persons>
+        </account>
+      </party>
+    </involved_parties>
+    <t_from_my_client>
+      <from_account>
+        <institution_name>BankA</institution_name>
+        <iban>IBAN1</iban>
+        <balance>900.0</balance>
+      </from_account>
+    </t_from_my_client>
+    <t_to_my_client>
+      <to_account>
+        <institution_name>BankB</institution_name>
+        <iban>IBAN2</iban>
+        <balance>1100.0</balance>
+      </to_account>
+    </t_to_my_client>
+    <amount_local>100.0</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+    <comments>local_label=1;global_label=1</comments>
+  </transaction>
+</report>
+'''
+
+
+def _transactions_involved():
+    root = etree.fromstring(INVOLVED_XML)
+    return root.findall('transaction')
+
+
+def test_involved_parties_mapping():
+    txs = _transactions_involved()
+    senders = unique_parties(txs, 'sending')
+    receivers = unique_parties(txs, 'receiving')
+    assert {p.name for p in senders} == {'Alice Sender'}
+    assert {p.name for p in receivers} == {'Bob Receiver'}
+    recs = related_parties(txs, 'Alice Sender', 'sending')
+    assert [p.name for p in recs] == ['Bob Receiver']
+    records = party_transactions(txs, 'Bob', 'Receiver', '1980-02-02T00:00:00')
+    assert len(records) == 1
+    assert records[0].counterparty == 'Alice Sender'
     # Outgoing for Alice
     records = party_transactions(
         txs,

@@ -216,19 +216,74 @@ def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Part
     return _extract_party_from_person_el(person_el, bank=bank, iban=iban)
 
 
+def _map_involved_parties(tx: etree._Element) -> Dict[str, Party]:
+    """Map account IBANs to parties described in ``involved_parties``."""
+
+    mapping: Dict[str, Party] = {}
+    for party_el in tx.findall("involved_parties/party"):
+        account_el = party_el.find("account_my_client")
+        if account_el is None:
+            account_el = party_el.find("account")
+        if account_el is None:
+            continue
+        party = _extract_party_from_account_el(account_el)
+        iban = account_el.findtext("iban")
+        if iban:
+            mapping[iban] = party
+    return mapping
+
+
+def _resolve_party_from_account(
+    account_el: Optional[etree._Element], mapping: Dict[str, Party]
+) -> Party:
+    party = _extract_party_from_account_el(account_el)
+    if (
+        party.name == "Unknown"
+        and account_el is not None
+        and (iban := account_el.findtext("iban"))
+        and iban in mapping
+    ):
+        mapped = mapping[iban]
+        bank = account_el.findtext("institution_name") or account_el.findtext("swift") or mapped.bank
+        return Party(
+            name=mapped.name,
+            dob=mapped.dob,
+            bank=bank,
+            address=mapped.address,
+            iban=iban,
+        )
+    return party
+
+
+def _extract_parties(tx: etree._Element) -> (Party, Party):
+    """Return sender and receiver parties for a transaction."""
+
+    mapping = _map_involved_parties(tx)
+
+    from_acc = tx.find("t_from_my_client/from_account")
+    if from_acc is not None:
+        sender = _resolve_party_from_account(from_acc, mapping)
+    else:
+        sender = _extract_party_from_person_el(tx.find("t_from_my_client/from_person"))
+
+    to_person = tx.find("t_to_my_client/to_person")
+    if to_person is not None:
+        bank = tx.findtext("t_to_my_client/to_account/institution_name")
+        iban = tx.findtext("t_to_my_client/to_account/iban")
+        receiver = _extract_party_from_person_el(to_person, bank=bank, iban=iban)
+    else:
+        receiver = _resolve_party_from_account(tx.find("t_to_my_client/to_account"), mapping)
+
+    return sender, receiver
+
+
 def unique_parties(transactions: Iterable[etree._Element], role: str) -> List[Party]:
     """Return a list of unique parties for the given role."""
 
     parties: Dict[str, Party] = {}
     for tx in transactions:
-        if role == "sending":
-            acc_el = tx.find("t_from_my_client/from_account")
-            party = _extract_party_from_account_el(acc_el)
-        else:
-            person_el = tx.find("t_to_my_client/to_person")
-            bank = tx.findtext("t_to_my_client/to_account/institution_name")
-            iban = tx.findtext("t_to_my_client/to_account/iban")
-            party = _extract_party_from_person_el(person_el, bank=bank, iban=iban)
+        sender, receiver = _extract_parties(tx)
+        party = sender if role == "sending" else receiver
         parties[party.name] = party
     return list(parties.values())
 
@@ -243,12 +298,7 @@ def related_parties(transactions: Iterable[etree._Element], name: str, role: str
 
     results: Dict[str, Party] = {}
     for tx in transactions:
-        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
-        receiver = _extract_party_from_person_el(
-            tx.find("t_to_my_client/to_person"),
-            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
-            iban=tx.findtext("t_to_my_client/to_account/iban"),
-        )
+        sender, receiver = _extract_parties(tx)
         if role == "sending" and sender.name == name:
             results[receiver.name] = receiver
         elif role == "receiving" and receiver.name == name:
@@ -273,35 +323,28 @@ def party_transactions(
 
     records: List[TransactionRecord] = []
     balance = start_balance
+    target_name = f"{first_name} {last_name}".strip()
     for tx in transactions:
         labels = _parse_labels(tx)
-        # Check receiving side
-        person_el = _unwrap_person_el(tx.find("t_to_my_client/to_person"))
-        first = person_el.findtext("first_name", "").strip() if person_el is not None else ""
-        last = person_el.findtext("last_name", "").strip() if person_el is not None else ""
-        dob_tx = person_el.findtext("birthdate") if person_el is not None else None
-        if person_el is not None and first == first_name and last == last_name and dob_tx == dob:
-            receiver = _extract_party_from_person_el(
-                person_el,
-                bank=tx.findtext("t_to_my_client/to_account/institution_name"),
-                iban=tx.findtext("t_to_my_client/to_account/iban"),
-            )
+        sender, receiver = _extract_parties(tx)
+        amount = float(tx.findtext("amount_local") or 0)
+        ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
+        timestamp = datetime.fromisoformat(ts_str)
+
+        # Incoming
+        if receiver.name == target_name and receiver.dob == dob:
             bank_id = receiver.bank
             if bank is not None and bank_id != bank:
                 continue
-            amount = float(tx.findtext("amount_local") or 0)
             balance_amount = tx.findtext("t_to_my_client/to_account/balance")
             balance_amount = float(balance_amount) if balance_amount else None
             balance += amount
-            counterparty = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
-            ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
-            timestamp = datetime.fromisoformat(ts_str)
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
                     tx_amount=amount,
                     balance_amount=balance_amount,
-                    counterparty=counterparty.name,
+                    counterparty=sender.name,
                     direction="in",
                     bank=bank_id,
                     running_balance=balance,
@@ -311,36 +354,20 @@ def party_transactions(
             )
             continue
 
-        # Check sending side
-        from_person_el = _unwrap_person_el(
-            tx.find("t_from_my_client/from_account/related_persons/account_related_person/t_person")
-        )
-        first = from_person_el.findtext("first_name", "").strip() if from_person_el is not None else ""
-        last = from_person_el.findtext("last_name", "").strip() if from_person_el is not None else ""
-        dob_tx = from_person_el.findtext("birthdate") if from_person_el is not None else None
-        if from_person_el is not None and first == first_name and last == last_name and dob_tx == dob:
-            bank_id = tx.findtext("t_from_my_client/from_account/institution_name") or tx.findtext(
-                "t_from_my_client/from_account/swift"
-            )
+        # Outgoing
+        if sender.name == target_name and sender.dob == dob:
+            bank_id = sender.bank
             if bank is not None and bank_id != bank:
                 continue
-            amount = float(tx.findtext("amount_local") or 0)
             balance_amount = tx.findtext("t_from_my_client/from_account/balance")
             balance_amount = float(balance_amount) if balance_amount else None
             balance -= amount
-            counterparty = _extract_party_from_person_el(
-                tx.find("t_to_my_client/to_person"),
-                bank=tx.findtext("t_to_my_client/to_account/institution_name"),
-                iban=tx.findtext("t_to_my_client/to_account/iban"),
-            )
-            ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
-            timestamp = datetime.fromisoformat(ts_str)
             records.append(
                 TransactionRecord(
                     timestamp=timestamp,
                     tx_amount=amount,
                     balance_amount=balance_amount,
-                    counterparty=counterparty.name,
+                    counterparty=receiver.name,
                     direction="out",
                     bank=bank_id,
                     running_balance=balance,
@@ -378,12 +405,7 @@ def labelled_transactions(transactions: Iterable[etree._Element], scope: str) ->
         if scope == "both" and not (local == 1 and global_ == 1):
             continue
 
-        sender = _extract_party_from_account_el(tx.find("t_from_my_client/from_account"))
-        receiver = _extract_party_from_person_el(
-            tx.find("t_to_my_client/to_person"),
-            bank=tx.findtext("t_to_my_client/to_account/institution_name"),
-            iban=tx.findtext("t_to_my_client/to_account/iban"),
-        )
+        sender, receiver = _extract_parties(tx)
         amount = float(tx.findtext("amount_local") or 0)
         ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
         timestamp = datetime.fromisoformat(ts_str)
