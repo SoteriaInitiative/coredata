@@ -65,14 +65,16 @@ If terminal prints ``Your system is ready to brew`` everything worked OK.
 
 </details>
 
-3. Provide application configuration and create a service account on GCP and add a JSON key with edit permissions.
-Safe the key to ``gcp-credentials/gcp-key.json`` - create the gcp-credentials folder if you don't have it.
-Next, provide the proper application configurations. 
-Create a ``.env`` file in the implementation root ``coredata/implementation`` with
-the following content:
-```text
-GCS_BUCKET_NAME=soteria-core-data
-GOOGLE_APPLICATION_CREDENTIALS=gcp-credentials/gcp-key.json
+3. Provide application configuration and create a service account on GCP.  The
+query tool reads credentials directly from environment variables, so no JSON key
+file is required.  Set the following variables in your shell:
+```zsh
+export GCS_BUCKET_NAME=soteria-core-data
+export GCP_PROJECT_ID=<PROJECT_ID>
+export GCP_PRIVATE_KEY_ID=<KEY_ID>
+export GCP_PRIVATE_KEY="<BASE64_OR_MULTILINE_PRIVATE_KEY>"
+export GCP_CLIENT_EMAIL=<SERVICE_ACCOUNT_EMAIL>
+export GCP_CLIENT_ID=<CLIENT_ID>
 ```
 
 4. Set the Google Cloud parameters
@@ -131,7 +133,6 @@ coredata/
 ├── documentation/              # Use cases & design documentation
 ├── example/                    # Example dataset implementing the standard
 ├── implementation/             # Example data generator and pattern editor
-├── gcp-credentials/            # Credentials for Google Cloud (you may need to create the folder)
 ├── standard/                   # Standard specification
 ├── README.md                   # This file
 └── LICENSE                     # License file

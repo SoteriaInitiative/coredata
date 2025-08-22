@@ -121,7 +121,12 @@ class AccountLink:
 # ---------------------------------------------------------------------------
 
 def _get_storage_client() -> storage.Client:
-    """Create a storage client using service-account fields from the environment."""
+    """Create a storage client using service-account fields from the environment.
+
+    The helper requires the ``GCP_PROJECT_ID``, ``GCP_PRIVATE_KEY_ID``,
+    ``GCP_PRIVATE_KEY``, ``GCP_CLIENT_EMAIL`` and ``GCP_CLIENT_ID`` variables to be
+    defined.  This avoids relying on a JSON key file at runtime.
+    """
 
     project_id = os.getenv("GCP_PROJECT_ID")
     key_id = os.getenv("GCP_PRIVATE_KEY_ID")
@@ -129,20 +134,33 @@ def _get_storage_client() -> storage.Client:
     client_email = os.getenv("GCP_CLIENT_EMAIL")
     client_id = os.getenv("GCP_CLIENT_ID")
 
-    if all([project_id, key_id, private_key, client_email, client_id]):
-        info = {
-            "type": "service_account",
-            "project_id": project_id,
-            "private_key_id": key_id,
-            "private_key": private_key.replace("\\n", "\n"),
-            "client_email": client_email,
-            "client_id": client_id,
-            "token_uri": "https://oauth2.googleapis.com/token",
-        }
-        creds = service_account.Credentials.from_service_account_info(info)
-        return storage.Client(credentials=creds, project=project_id)
+    missing = [
+        var
+        for var in (
+            "GCP_PROJECT_ID",
+            "GCP_PRIVATE_KEY_ID",
+            "GCP_PRIVATE_KEY",
+            "GCP_CLIENT_EMAIL",
+            "GCP_CLIENT_ID",
+        )
+        if not os.getenv(var)
+    ]
+    if missing:
+        raise EnvironmentError(
+            "Missing required environment variables: " + ", ".join(missing)
+        )
 
-    return storage.Client()
+    info = {
+        "type": "service_account",
+        "project_id": project_id,
+        "private_key_id": key_id,
+        "private_key": private_key.replace("\\n", "\n"),
+        "client_email": client_email,
+        "client_id": client_id,
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+    creds = service_account.Credentials.from_service_account_info(info)
+    return storage.Client(credentials=creds, project=project_id)
 
 
 def _get_bucket_name() -> str:

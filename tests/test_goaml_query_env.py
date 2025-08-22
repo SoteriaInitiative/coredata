@@ -1,3 +1,5 @@
+import pytest
+
 from tools.goaml_query import build_parser, _get_storage_client
 
 
@@ -53,3 +55,16 @@ def test_env_service_account(monkeypatch):
     assert called["project"] == "proj"
     assert called["credentials"] is dummy_creds
     assert called["info"]["private_key"] == "dummy"
+
+
+def test_env_service_account_missing(monkeypatch):
+    for var in (
+        "GCP_PROJECT_ID",
+        "GCP_PRIVATE_KEY_ID",
+        "GCP_PRIVATE_KEY",
+        "GCP_CLIENT_EMAIL",
+        "GCP_CLIENT_ID",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(EnvironmentError):
+        _get_storage_client()
