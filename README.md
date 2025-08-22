@@ -101,7 +101,7 @@ cat Bank_1_transactions.json | jq . | more
 ```zsh
 python tools/goaml_query.py receivers
 python tools/goaml_query.py labels --scope both
-python tools/goaml_query.py transactions "Jessica Hale" --bank "CH National"
+python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
 ```
 <details>
     <summary>💡Hint how to interpret the data:</summary>

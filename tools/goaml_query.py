@@ -24,8 +24,10 @@ environment variables:
     Used by the ``receivers-for`` command when no positional argument is given.
 ``RECEIVER_NAME``
     Used by the ``senders-for`` command when no positional argument is given.
-``PARTY_NAME``
-    Used by the ``transactions`` command when no positional argument is given.
+``PARTY_FIRST_NAME``
+``PARTY_LAST_NAME``
+``PARTY_DOB``
+    Used by the ``transactions`` command when no positional arguments are given.
 ``BANK``
     Default bank identifier for the ``transactions`` command.
 ``START_BALANCE``
@@ -240,23 +242,31 @@ def related_parties(transactions: Iterable[etree._Element], name: str, role: str
 
 def receiving_transactions(
     transactions: Iterable[etree._Element],
-    name: str,
+    first_name: str,
+    last_name: str,
+    dob: str,
     *,
     bank: Optional[str] = None,
     start_balance: float = 0.0,
 ) -> List[TransactionRecord]:
-    """Return time sorted receiving transactions for ``name``."""
+    """Return time sorted receiving transactions for a specific party."""
 
     records: List[TransactionRecord] = []
     balance = start_balance
     for tx in transactions:
+        person_el = tx.find("t_to_my_client/to_person")
+        if person_el is None:
+            continue
+        first = person_el.findtext("first_name", "").strip()
+        last = person_el.findtext("last_name", "").strip()
+        dob_tx = person_el.findtext("birthdate")
+        if first != first_name or last != last_name or dob_tx != dob:
+            continue
         receiver = _extract_party_from_person_el(
-            tx.find("t_to_my_client/to_person"),
+            person_el,
             bank=tx.findtext("t_to_my_client/to_account/institution_name"),
             iban=tx.findtext("t_to_my_client/to_account/iban"),
         )
-        if receiver.name != name:
-            continue
         bank_id = receiver.bank
         if bank is not None and bank_id != bank:
             continue
@@ -386,12 +396,16 @@ def _cmd_related(args: argparse.Namespace, role: str) -> None:
 
 
 def _cmd_transactions(args: argparse.Namespace) -> None:
-    if not args.name:
-        raise SystemExit("A party name must be provided via argument or environment variable")
+    if not (args.first_name and args.last_name and args.dob):
+        raise SystemExit(
+            "First name, last name and DOB must be provided via arguments or environment variables"
+        )
     txs = load_transactions()
     records = receiving_transactions(
         txs,
-        args.name,
+        args.first_name,
+        args.last_name,
+        args.dob,
         bank=args.bank,
         start_balance=args.start_balance,
     )
@@ -447,7 +461,24 @@ def build_parser() -> argparse.ArgumentParser:
     send_for.set_defaults(func=lambda a: _cmd_related(a, "receiving"))
 
     tx_cmd = sub.add_parser("transactions", help="Show receiving transactions")
-    tx_cmd.add_argument("name", nargs="?", default=os.getenv("PARTY_NAME"), help="Receiving party name")
+    tx_cmd.add_argument(
+        "first_name",
+        nargs="?",
+        default=os.getenv("PARTY_FIRST_NAME"),
+        help="Receiving party first name",
+    )
+    tx_cmd.add_argument(
+        "last_name",
+        nargs="?",
+        default=os.getenv("PARTY_LAST_NAME"),
+        help="Receiving party last name",
+    )
+    tx_cmd.add_argument(
+        "dob",
+        nargs="?",
+        default=os.getenv("PARTY_DOB"),
+        help="Receiving party date of birth",
+    )
     tx_cmd.add_argument("--bank", default=os.getenv("BANK"), help="Filter by bank identifier")
     tx_cmd.add_argument(
         "--start-balance",

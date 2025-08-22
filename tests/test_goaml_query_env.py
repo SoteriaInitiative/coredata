@@ -9,12 +9,16 @@ def test_env_defaults_receivers_for(monkeypatch):
 
 
 def test_env_defaults_transactions(monkeypatch):
-    monkeypatch.setenv("PARTY_NAME", "Bob")
+    monkeypatch.setenv("PARTY_FIRST_NAME", "Bob")
+    monkeypatch.setenv("PARTY_LAST_NAME", "Receiver")
+    monkeypatch.setenv("PARTY_DOB", "1980-02-02T00:00:00")
     monkeypatch.setenv("BANK", "BankA")
     monkeypatch.setenv("START_BALANCE", "10.5")
     parser = build_parser()
     args = parser.parse_args(["transactions"])
-    assert args.name == "Bob"
+    assert args.first_name == "Bob"
+    assert args.last_name == "Receiver"
+    assert args.dob == "1980-02-02T00:00:00"
     assert args.bank == "BankA"
     assert args.start_balance == 10.5
 

@@ -71,7 +71,13 @@ def test_related_and_transactions():
     txs = _transactions()
     recs = related_parties(txs, 'Alice Sender', 'sending')
     assert [p.name for p in recs] == ['Bob Receiver']
-    records = receiving_transactions(txs, 'Bob Receiver', start_balance=10.0)
+    records = receiving_transactions(
+        txs,
+        'Bob',
+        'Receiver',
+        '1980-02-02T00:00:00',
+        start_balance=10.0,
+    )
     assert len(records) == 1
     assert records[0].sender == 'Alice Sender'
     assert records[0].amount == 100.0
