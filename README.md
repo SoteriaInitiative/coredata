@@ -104,7 +104,7 @@ cat Bank_1_transactions.json | jq . | more
 python tools/goaml_query.py receivers
 python tools/goaml_query.py labels --scope both
 python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
-python tools/goaml_query.py multilink-accounts
+python tools/goaml_query.py multi-bank
 ```
 The tool resolves party names from ``involved_parties`` sections so that
 senders and receivers are identified even when transactions only reference
@@ -113,9 +113,8 @@ payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
 The ``senders`` and ``receivers`` commands additionally show counts of incoming
 and outgoing transactions for each party, plus an ``Accounts`` column indicating
-how many distinct bank accounts are associated with each party. The
-``multilink-accounts`` command lists any bank accounts that appear linked to
-more than one party.
+how many distinct bank accounts are associated with each party. The ``multi-bank``
+command lists parties that hold accounts at more than one bank.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 

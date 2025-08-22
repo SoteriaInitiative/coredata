@@ -14,6 +14,7 @@ The queries implemented are:
 4. Retrieve all transactions for a party across all banks
 5. Retrieve all transactions for a party for a specific bank
 6. Retrieve transactions flagged by local/global labels
+7. List parties that hold accounts at multiple banks
 
 For convenience many command line parameters can also be provided via
 environment variables:
@@ -51,7 +52,7 @@ import argparse
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -107,13 +108,12 @@ class LabeledTransaction:
     global_label: int
 
 
-@dataclass
-class AccountLink:
-    """Bank account associated with multiple distinct parties."""
+@dataclass(frozen=True)
+class MultiBankParty:
+    """Party that owns accounts at more than one bank."""
 
-    iban: str
-    bank: Optional[str]
-    parties: List[str]
+    party: Party
+    banks: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -356,26 +356,24 @@ def unique_parties(
     return results
 
 
-def multilink_accounts(transactions: Iterable[etree._Element]) -> List[AccountLink]:
-    """Return accounts linked to more than one distinct party."""
+def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankParty]:
+    """Return parties that hold accounts at more than one bank."""
 
-    mapping: Dict[str, Dict[str, Any]] = {}
+    mapping: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for tx in transactions:
         sender, receiver = _extract_parties(tx)
         for party in (sender, receiver):
-            if not party.iban:
-                continue
-            entry = mapping.setdefault(
-                party.iban, {"bank": party.bank, "parties": set()}
-            )
-            entry["parties"].add(party.name)
+            key = (party.name, party.dob or "", party.address or "")
+            entry = mapping.setdefault(key, {"party": party, "banks": set()})
+            if party.bank:
+                entry["banks"].add(party.bank)
 
-    results: List[AccountLink] = []
-    for iban, data in mapping.items():
-        parties = data["parties"]
-        if len(parties) > 1:
+    results: List[MultiBankParty] = []
+    for data in mapping.values():
+        banks = data["banks"]
+        if len(banks) > 1:
             results.append(
-                AccountLink(iban=iban, bank=data["bank"], parties=sorted(parties))
+                MultiBankParty(party=data["party"], banks=sorted(banks))
             )
     return results
 
@@ -627,16 +625,18 @@ def _cmd_labels(args: argparse.Namespace) -> None:
     _print_table(rows)
 
 
-def _cmd_multilink_accounts(args: argparse.Namespace) -> None:
+def _cmd_multibank(args: argparse.Namespace) -> None:
     txs = load_transactions()
-    links = multilink_accounts(txs)
+    parties = multibank_parties(txs)
     rows = [
         {
-            "IBAN": link.iban,
-            "Bank": link.bank or "",
-            "Parties": ", ".join(link.parties),
+            "Name": mb.party.name,
+            "DOB": mb.party.dob or "",
+            "Address": mb.party.address or "",
+            "Banks": ", ".join(mb.banks),
+            "Count": len(mb.banks),
         }
-        for link in links
+        for mb in parties
     ]
     _print_table(rows)
 
@@ -697,9 +697,9 @@ def build_parser() -> argparse.ArgumentParser:
     lbl_cmd.set_defaults(func=_cmd_labels)
 
     multi_cmd = sub.add_parser(
-        "multilink-accounts", help="List accounts linked to multiple parties"
+        "multi-bank", help="List parties with accounts at multiple banks"
     )
-    multi_cmd.set_defaults(func=_cmd_multilink_accounts)
+    multi_cmd.set_defaults(func=_cmd_multibank)
 
     return parser
 

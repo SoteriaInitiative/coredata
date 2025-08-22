@@ -4,7 +4,7 @@ from tools.goaml_query import (
     related_parties,
     party_transactions,
     labelled_transactions,
-    multilink_accounts,
+    multibank_parties,
 )
 
 SAMPLE_XML = '''
@@ -332,16 +332,27 @@ def test_unique_parties_account_counts():
     assert alice.account_count == 2
 
 
-MULTILINK_XML = '''
+MULTIBANK_XML = '''
 <report>
   <transaction>
     <t_from_my_client>
       <from_account>
         <institution_name>BankA</institution_name>
-        <iban>SHARED</iban>
+        <iban>IBAN1</iban>
         <related_persons>
           <account_related_person>
-            <t_person><first_name>Alice</first_name><last_name>Sender</last_name></t_person>
+            <t_person>
+              <first_name>Alice</first_name>
+              <last_name>Smith</last_name>
+              <birthdate>1970-01-01T00:00:00</birthdate>
+              <addresses>
+                <address>
+                  <address>Street1</address>
+                  <city>City1</city>
+                  <country_code>CH</country_code>
+                </address>
+              </addresses>
+            </t_person>
           </account_related_person>
         </related_persons>
       </from_account>
@@ -353,31 +364,43 @@ MULTILINK_XML = '''
   <transaction>
     <t_from_my_client>
       <from_account>
-        <institution_name>BankA</institution_name>
-        <iban>SHARED</iban>
+        <institution_name>BankB</institution_name>
+        <iban>IBAN2</iban>
         <related_persons>
           <account_related_person>
-            <t_person><first_name>Charlie</first_name><last_name>Sender</last_name></t_person>
+            <t_person>
+              <first_name>Alice</first_name>
+              <last_name>Smith</last_name>
+              <birthdate>1970-01-01T00:00:00</birthdate>
+              <addresses>
+                <address>
+                  <address>Street1</address>
+                  <city>City1</city>
+                  <country_code>CH</country_code>
+                </address>
+              </addresses>
+            </t_person>
           </account_related_person>
         </related_persons>
       </from_account>
     </t_from_my_client>
-    <t_to_my_client><to_person><first_name>Dana</first_name></to_person></t_to_my_client>
-    <amount_local>1</amount_local>
+    <t_to_my_client><to_person><first_name>Carl</first_name></to_person></t_to_my_client>
+    <amount_local>2</amount_local>
     <date_transaction>2023-01-02T00:00:00</date_transaction>
   </transaction>
 </report>
 '''
 
 
-def _transactions_multilink():
-    root = etree.fromstring(MULTILINK_XML)
+def _transactions_multibank():
+    root = etree.fromstring(MULTIBANK_XML)
     return root.findall('transaction')
 
 
-def test_multilink_accounts():
-    txs = _transactions_multilink()
-    links = multilink_accounts(txs)
-    assert len(links) == 1
-    assert links[0].iban == 'SHARED'
-    assert set(links[0].parties) == {'Alice Sender', 'Charlie Sender'}
+def test_multibank_parties():
+    txs = _transactions_multibank()
+    parties = multibank_parties(txs)
+    assert len(parties) == 1
+    entry = parties[0]
+    assert entry.party.name == 'Alice Smith'
+    assert set(entry.banks) == {'BankA', 'BankB'}
