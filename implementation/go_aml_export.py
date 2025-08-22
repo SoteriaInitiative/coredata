@@ -29,29 +29,36 @@ def load_transactions(path):
         return json.load(handle)
 
 
-def filter_sar_transactions(transactions):
-    """Return only transactions where local_label == 1."""
-    return [t for t in transactions if t.get('Transaction', {}).get('local_label') == 1]
+def update_account_balances(transactions):
+    """Recalculate running balances for each account."""
+    by_account = defaultdict(list)
+    for tx in transactions:
+        acc = tx.get('Transaction', {}).get('account')
+        if acc:
+            by_account[acc.get('account_id')].append(tx)
+
+    for acc_id, txs in by_account.items():
+        txs.sort(key=lambda t: t['Transaction']['timestamp'])
+        initial = txs[0]['Transaction']['account'].get('balance_before', 0.0)
+        running = initial
+        for tx in txs:
+            tdata = tx['Transaction']
+            acc = tdata['account']
+            acc['balance_before'] = round(running, 2)
+            running += tdata.get('currency_amount', 0.0)
+            acc['balance_after'] = round(running, 2)
 
 
-def group_by_party(sar_transactions, all_transactions):
-    """Group SAR transactions by originator and day and include all matching transactions."""
+def group_by_party(transactions):
+    """Group all transactions by originator and UTC day."""
 
     index = defaultdict(list)
-    for tx in all_transactions:
+    for tx in transactions:
         tdata = tx['Transaction']
         originator = tdata.get('transaction_originator')
         day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
         index[(originator, day)].append(tx)
-
-    grouped = {}
-    for tx in sar_transactions:
-        tdata = tx['Transaction']
-        originator = tdata.get('transaction_originator')
-        day = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
-        grouped[(originator, day)] = index[(originator, day)]
-
-    return grouped
+    return index
 
 
 TYPE_MAP = {
@@ -371,8 +378,8 @@ def export_to_goaml(json_path, currency_code_local='CHF', same_person_prob=0.9):
         Defaults to 0.9.
     """
     transactions = load_transactions(json_path)
-    sar_transactions = filter_sar_transactions(transactions)
-    grouped = group_by_party(sar_transactions, transactions)
+    update_account_balances(transactions)
+    grouped = group_by_party(transactions)
 
     bank_id = os.path.splitext(os.path.basename(json_path))[0]
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')

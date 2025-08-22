@@ -22,8 +22,7 @@ def test_cash_deposit_structure():
         1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=1.0, bank_knows=True, std_multiplier=2.0, max_splits=1
     )
-    sar = [t for t in txs if t['Transaction']['local_label'] == 1]
-    grouped = go_aml_export.group_by_party(sar, txs)
+    grouped = go_aml_export.group_by_party(txs)
     originator, day = next(iter(grouped))
     report = go_aml_export.build_report(originator, day, grouped[(originator, day)], 'CHF')
     go_aml_export.validate_report(report)
