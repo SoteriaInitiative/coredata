@@ -37,3 +37,22 @@ def test_cash_deposit_structure():
     assert tx_el.findtext('transaction_description') == 'Cash Deposit'
     loc = tx_el.findtext('transaction_location')
     assert loc.startswith('ATM') or loc.startswith('Counter')
+
+
+def test_transaction_dates_reflect_timestamp():
+    parties, receivers, accounts_by_bank, _ = generate_goaml.generate_parties(
+        num_parties=10, banks=1, multi_bank_prob=0.0, multi_bank_distribution=1
+    )
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=1.0, bank_knows=True, std_multiplier=2.0, max_splits=1
+    )
+    grouped = go_aml_export.group_by_party(txs)
+    originator, day = next(iter(grouped))
+    report = go_aml_export.build_report(originator, day, grouped[(originator, day)], 'CHF')
+    xml_tx = report.find('transaction')
+    tdata = grouped[(originator, day)][0]['Transaction']
+    expected = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%dT%H:%M:%S')
+    assert xml_tx.findtext('date_transaction') == expected
+    assert xml_tx.findtext('value_date') == expected

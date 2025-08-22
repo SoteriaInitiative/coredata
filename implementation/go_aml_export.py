@@ -211,9 +211,11 @@ def build_report(originator, day, transactions, currency_code_local, same_person
         loc_addr = f"{fake.street_address()}, {fake.city()}"
         etree.SubElement(tx_el, 'transaction_location').text = f"{loc_type} {loc_id} {loc_addr}"
         etree.SubElement(tx_el, 'transaction_description').text = 'Cash Deposit'
-        date_str = datetime.utcfromtimestamp(tdata['timestamp'] / 1000).strftime('%Y-%m-%d')
-        etree.SubElement(tx_el, 'date_transaction').text = f'{date_str}T00:00:00'
-        etree.SubElement(tx_el, 'value_date').text = f'{date_str}T00:00:00'
+        tx_datetime = datetime.utcfromtimestamp(tdata['timestamp'] / 1000)
+        date_str = tx_datetime.strftime('%Y-%m-%d')
+        ts_exact = tx_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+        etree.SubElement(tx_el, 'date_transaction').text = ts_exact
+        etree.SubElement(tx_el, 'value_date').text = ts_exact
         tx_code = TYPE_MAP.get(tdata.get('transaction_type', '').upper(), 'B2BWT')
         etree.SubElement(tx_el, 'transaction_type_code').text = tx_code
         etree.SubElement(tx_el, 'amount_local').text = f"{tdata.get('currency_amount', 0):.2f}"
