@@ -146,8 +146,23 @@ def _build_account(parent, account, currency_code_local, day, tag):
     return acc_el
 
 
-def build_report(originator, day, transactions, currency_code_local):
-    """Build a goAML XML report for an originator and its transactions."""
+def build_report(originator, day, transactions, currency_code_local, same_person_prob=0.9):
+    """Build a goAML XML report for an originator and its transactions.
+
+    Parameters
+    ----------
+    originator : str
+        Identifier for the transaction originator.
+    day : str
+        UTC day (YYYY-MM-DD) of the transactions being reported.
+    transactions : list
+        List of transaction dictionaries.
+    currency_code_local : str
+        Local currency code (e.g. CHF).
+    same_person_prob : float, optional
+        Probability that the depositor (from_person) is the same individual as
+        the related person on the credited account. Defaults to 0.9.
+    """
     report = etree.Element('report')
     etree.SubElement(report, 'rentity_id').text = '1'
     etree.SubElement(report, 'rentity_branch').text = 'HO'
@@ -197,6 +212,20 @@ def build_report(originator, day, transactions, currency_code_local):
                     tdata['exchange_rate'].get('exchange_rate', 1)
                 )
             originator = tdata.get('originator', {})
+            # ensure we have originator details
+            if not originator:
+                originator.update({
+                    'first_name': fake.first_name(),
+                    'last_name': fake.last_name(),
+                    'birthdate': fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00'),
+                    'address': {
+                        'address': fake.street_address(),
+                        'city': fake.city(),
+                        'country_code': 'CH',
+                        'state': 'ZH',
+                    },
+                })
+
             if originator.get('type') == 'entity':
                 fe = etree.SubElement(t_from, 'from_entity')
                 _build_entity(fe, originator)
@@ -217,7 +246,28 @@ def build_report(originator, day, transactions, currency_code_local):
                 etree.SubElement(tfc, 'foreign_exchange_rate').text = str(
                     tdata['exchange_rate'].get('exchange_rate', 1)
                 )
-            _build_account(t_to, tdata.get('account', {}), currency_code_local, date_str, 'to_account')
+            account_info = tdata.get('account', {}).copy()
+            if random.random() < same_person_prob:
+                account_info.update({
+                    'first_name': originator.get('first_name', 'Unknown'),
+                    'last_name': originator.get('last_name', 'Unknown'),
+                    'birthdate': originator.get('birthdate', '1900-01-01T00:00:00'),
+                    'address': originator.get('address'),
+                })
+            else:
+                if not account_info.get('first_name'):
+                    account_info.update({
+                        'first_name': fake.first_name(),
+                        'last_name': fake.last_name(),
+                        'birthdate': fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00'),
+                        'address': {
+                            'address': fake.street_address(),
+                            'city': fake.city(),
+                            'country_code': 'CH',
+                            'state': 'ZH',
+                        },
+                    })
+            _build_account(t_to, account_info, currency_code_local, date_str, 'to_account')
             to_country = tdata.get('account', {}).get('country_code', 'CH')
             if to_country == 'UK':
                 to_country = 'GB'
@@ -307,8 +357,19 @@ def upload_report(xml_bytes, destination):
         logger.error('Failed to upload report %s: %s', destination, exc)
 
 
-def export_to_goaml(json_path, currency_code_local='CHF'):
-    """Convert transaction data to goAML XML and upload to GCS."""
+def export_to_goaml(json_path, currency_code_local='CHF', same_person_prob=0.9):
+    """Convert transaction data to goAML XML and upload to GCS.
+
+    Parameters
+    ----------
+    json_path : str
+        Path to the transactions JSON file.
+    currency_code_local : str, optional
+        Local currency code to use for amounts.
+    same_person_prob : float, optional
+        Probability that deposits are made into the depositor's own account.
+        Defaults to 0.9.
+    """
     transactions = load_transactions(json_path)
     sar_transactions = filter_sar_transactions(transactions)
     grouped = group_by_party(sar_transactions, transactions)
@@ -320,7 +381,7 @@ def export_to_goaml(json_path, currency_code_local='CHF'):
     for (originator, day), txs in grouped.items():
         for i in range(0, len(txs), 1000):
             chunk = txs[i:i + 1000]
-            report = build_report(originator, day, chunk, currency_code_local)
+            report = build_report(originator, day, chunk, currency_code_local, same_person_prob)
             validate_report(report)
             verify_content(chunk, report)
             xml_bytes = etree.tostring(report, pretty_print=True, encoding='UTF-8', xml_declaration=True)
@@ -335,6 +396,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Export transactions to goAML XML format.')
     parser.add_argument('--input', default='example/Bank_1_transactions.json', help='Path to the transaction JSON file.')
     parser.add_argument('--currency_code_local', default='CHF', help='Currency code used for local amounts.')
+    parser.add_argument(
+        '--same_person_prob',
+        type=float,
+        default=0.9,
+        help='Probability that the depositor is also the related person on the credited account.'
+    )
     args = parser.parse_args()
 
-    export_to_goaml(args.input, args.currency_code_local)
+    export_to_goaml(args.input, args.currency_code_local, args.same_person_prob)
