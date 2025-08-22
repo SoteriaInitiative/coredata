@@ -71,11 +71,12 @@ class Party:
 
 @dataclass(frozen=True)
 class PartyTxCounts:
-    """A party enriched with incoming/outgoing transaction counts."""
+    """A party enriched with transaction counts and account information."""
 
     party: Party
     incoming: int = 0
     outgoing: int = 0
+    account_count: int = 0
 
 
 @dataclass
@@ -104,6 +105,15 @@ class LabeledTransaction:
     bank: Optional[str]
     local_label: int
     global_label: int
+
+
+@dataclass
+class AccountLink:
+    """Bank account associated with multiple distinct parties."""
+
+    iban: str
+    bank: Optional[str]
+    parties: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +303,7 @@ def unique_parties(
 
     parties: Dict[str, Party] = {}
     counts: Dict[str, Dict[str, int]] = {}
+    accounts: Dict[str, set[str]] = {}
 
     for tx in transactions:
         sender, receiver = _extract_parties(tx)
@@ -302,6 +313,11 @@ def unique_parties(
         counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
         counts.setdefault(receiver.name, {"incoming": 0, "outgoing": 0})["incoming"] += 1
 
+        if sender.iban:
+            accounts.setdefault(sender.name, set()).add(sender.iban)
+        if receiver.iban:
+            accounts.setdefault(receiver.name, set()).add(receiver.iban)
+
     results: List[PartyTxCounts] = []
     for name, party in parties.items():
         incoming = counts.get(name, {}).get("incoming", 0)
@@ -310,7 +326,39 @@ def unique_parties(
             continue
         if role == "receiving" and incoming == 0:
             continue
-        results.append(PartyTxCounts(party=party, incoming=incoming, outgoing=outgoing))
+        account_count = len(accounts.get(name, set()))
+        results.append(
+            PartyTxCounts(
+                party=party,
+                incoming=incoming,
+                outgoing=outgoing,
+                account_count=account_count,
+            )
+        )
+    return results
+
+
+def multilink_accounts(transactions: Iterable[etree._Element]) -> List[AccountLink]:
+    """Return accounts linked to more than one distinct party."""
+
+    mapping: Dict[str, Dict[str, Any]] = {}
+    for tx in transactions:
+        sender, receiver = _extract_parties(tx)
+        for party in (sender, receiver):
+            if not party.iban:
+                continue
+            entry = mapping.setdefault(
+                party.iban, {"bank": party.bank, "parties": set()}
+            )
+            entry["parties"].add(party.name)
+
+    results: List[AccountLink] = []
+    for iban, data in mapping.items():
+        parties = data["parties"]
+        if len(parties) > 1:
+            results.append(
+                AccountLink(iban=iban, bank=data["bank"], parties=sorted(parties))
+            )
     return results
 
 
@@ -484,6 +532,7 @@ def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
             "Bank": stats.party.bank or "",
             "Address": stats.party.address or "",
             "IBAN": stats.party.iban or "",
+            "Accounts": stats.account_count,
             "Incoming Tx": stats.incoming,
             "Outgoing Tx": stats.outgoing,
         }
@@ -560,6 +609,20 @@ def _cmd_labels(args: argparse.Namespace) -> None:
     _print_table(rows)
 
 
+def _cmd_multilink_accounts(args: argparse.Namespace) -> None:
+    txs = load_transactions()
+    links = multilink_accounts(txs)
+    rows = [
+        {
+            "IBAN": link.iban,
+            "Bank": link.bank or "",
+            "Parties": ", ".join(link.parties),
+        }
+        for link in links
+    ]
+    _print_table(rows)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command")
@@ -614,6 +677,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Select which label to filter by",
     )
     lbl_cmd.set_defaults(func=_cmd_labels)
+
+    multi_cmd = sub.add_parser(
+        "multilink-accounts", help="List accounts linked to multiple parties"
+    )
+    multi_cmd.set_defaults(func=_cmd_multilink_accounts)
 
     return parser
 
