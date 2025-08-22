@@ -136,6 +136,7 @@ This release includes the following key features:
 - Synthetic goAML generator and exporter for multi-bank large cash scenarios
 - goAML reports group same-day transactions by originator and track account balances
 - Reports use STR code and include standard indicators 1131V and 2003G
+- Export utility validates XML against the goAML XSD and can upload reports to Cloud Storage
 
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
