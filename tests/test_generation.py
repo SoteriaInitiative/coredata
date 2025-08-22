@@ -27,6 +27,8 @@ def test_iban_uniqueness():
     for bank_accounts in accounts_by_bank.values():
         for acc in bank_accounts.values():
             ibans.append(acc['iban'])
+    for recv in receivers.values():
+        ibans.append(recv['account']['iban'])
     assert len(ibans) == len(set(ibans))
 
 
@@ -44,6 +46,14 @@ def test_address_consistency():
         for bank_accounts in accounts_by_bank.values():
             if pid in bank_accounts:
                 assert bank_accounts[pid]['address'] == addr
+
+
+def test_receiver_account_details():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    for recv in receivers.values():
+        acc = recv['account']
+        assert acc['bank_name'].startswith('Bank_')
+        assert acc['iban'].startswith('CH')
 
 
 def test_account_balance_and_receiver_address():

@@ -179,16 +179,7 @@ def build_report(bank_id, scenario, originator, day, transactions, currency_code
         tfc = etree.SubElement(t_to, 'to_foreign_currency')
         etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
-        to_person = etree.SubElement(t_to, 'to_person')
-        beneficiary = tdata.get('beneficiary', {})
-        addr = beneficiary.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-        _build_person(
-            to_person,
-            beneficiary.get('first_name', 'Unknown'),
-            beneficiary.get('last_name', 'Unknown'),
-            addr,
-            beneficiary.get('birthdate', '1900-01-01T00:00:00'),
-        )
+        _build_account(t_to, tdata.get('beneficiary_account', {}), currency_code_local, date_str, 'to_account')
         etree.SubElement(t_to, 'to_country').text = tdata.get('transaction_beneficiary_country_code', 'CH')
 
         comments = etree.SubElement(tx_el, 'comments')
@@ -289,6 +280,20 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
             'address': address,
         }
 
+        receivers[pid]['account'] = {
+            'bank_name': f'Bank_{random.randint(1, banks)}',
+            'account_id': fake.unique.bban(),
+            'bic': f'BICR{i+1}',
+            'iban': f"CH{fake.unique.random_number(digits=19)}",
+            'account_type': random.choice(['current', 'business']),
+            'address': address,
+            'country_code': 'CH',
+            'first_name': recv_first,
+            'last_name': 'Unknown',
+            'birthdate': recv_birth,
+            'party_type': 'person',
+        }
+
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
@@ -374,6 +379,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                         'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')), 
                         'transaction_beneficiary_country_code': 'CH',
                         'beneficiary': beneficiary,
+                        'beneficiary_account': beneficiary['account'],
                         'local_label': local_label,
                         'global_label': 1,
                     }
@@ -406,6 +412,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                     'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
                     'transaction_beneficiary_country_code': 'CH',
                     'beneficiary': beneficiary,
+                    'beneficiary_account': beneficiary['account'],
                     'local_label': 0,
                     'global_label': 0,
                 }
