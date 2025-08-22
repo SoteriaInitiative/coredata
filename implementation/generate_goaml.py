@@ -69,9 +69,11 @@ def _build_entity(parent, name, legal_form, address):
     etree.SubElement(parent, 'name').text = name
     etree.SubElement(parent, 'commercial_name').text = name
     etree.SubElement(parent, 'incorporation_legal_form').text = LEGAL_FORM_CODES.get(legal_form, '1')
+    etree.SubElement(parent, 'incorporation_number').text = '000000'
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
     etree.SubElement(parent, 'incorporation_country_code').text = address.get('country_code', 'CH')
+    etree.SubElement(parent, 'tax_reg_number').text = 'Yes'
 
 
 def _build_account(parent, account, currency_code_local, day, tag):
@@ -269,6 +271,8 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
     receivers = {}
     accounts = {b: {} for b in range(1, banks + 1)}
     multi_bank_count = 0
+    has_entity_party = False
+    has_entity_receiver = False
     for i in range(num_parties):
         pid = f'P{i+1}'
         address = {
@@ -277,46 +281,100 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
             'country_code': 'CH',
             'state': 'ZH',
         }
-        party_type = 'person'
-        first, last = fake.first_name(), fake.last_name()
-        birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-        party_info = {
-            'id': pid,
-            'type': 'person',
-            'first_name': first,
-            'last_name': last,
-            'birthdate': birthdate,
-            'address': address,
-        }
+
+        # Decide party type; ensure at least one entity overall
+        if not has_entity_party and i == num_parties - 1:
+            party_type = 'entity'
+        else:
+            party_type = random.choice(['person', 'entity'])
+
+        if party_type == 'person':
+            first, last = fake.first_name(), fake.last_name()
+            birthdate = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            party_info = {
+                'id': pid,
+                'type': 'person',
+                'first_name': first,
+                'last_name': last,
+                'birthdate': birthdate,
+                'address': address,
+            }
+        else:
+            name = fake.company()
+            legal_form = random.choice(LEGAL_FORMS)
+            party_info = {
+                'id': pid,
+                'type': 'entity',
+                'name': name,
+                'legal_form': legal_form,
+                'address': address,
+            }
+            has_entity_party = True
+
         parties[pid] = party_info
 
-        recv_first = fake.first_name()
-        while recv_first == party_info['first_name']:
-            recv_first = fake.first_name()
-        recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-        while recv_birth == party_info['birthdate']:
-            recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
-        receivers[pid] = {
-            'type': 'person',
-            'first_name': recv_first,
-            'last_name': 'Unknown',
-            'birthdate': recv_birth,
-            'address': address,
-        }
+        # Receiver generation; ensure at least one entity receiver overall
+        if not has_entity_receiver and i == num_parties - 1:
+            recv_type = 'entity'
+        else:
+            recv_type = random.choice(['person', 'entity'])
 
-        receivers[pid]['account'] = {
-            'bank_name': f'Bank_{random.randint(1, banks)}',
-            'account_id': fake.unique.bban(),
-            'bic': f'BICR{i+1}',
-            'iban': f"CH{fake.unique.random_number(digits=19)}",
-            'account_type': random.choice(['current', 'business']),
-            'address': address,
-            'country_code': 'CH',
-            'first_name': recv_first,
-            'last_name': 'Unknown',
-            'birthdate': recv_birth,
-            'party_type': 'person',
-        }
+        if recv_type == 'person':
+            recv_first = fake.first_name()
+            while recv_first == party_info.get('first_name'):
+                recv_first = fake.first_name()
+            recv_last = fake.last_name()
+            while recv_last == party_info.get('last_name'):
+                recv_last = fake.last_name()
+            recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            while recv_birth == party_info.get('birthdate'):
+                recv_birth = fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00')
+            receivers[pid] = {
+                'type': 'person',
+                'first_name': recv_first,
+                'last_name': recv_last,
+                'birthdate': recv_birth,
+                'address': address,
+            }
+            rec_account = {
+                'bank_name': f'Bank_{random.randint(1, banks)}',
+                'account_id': fake.unique.bban(),
+                'bic': f'BICR{i+1}',
+                'iban': f"CH{fake.unique.random_number(digits=19)}",
+                'account_type': random.choice(['current', 'business']),
+                'address': address,
+                'country_code': 'CH',
+                'first_name': recv_first,
+                'last_name': recv_last,
+                'birthdate': recv_birth,
+                'party_type': 'person',
+                'balance_after': 0.0,
+            }
+        else:
+            rname = fake.company()
+            rform = random.choice(LEGAL_FORMS)
+            receivers[pid] = {
+                'type': 'entity',
+                'name': rname,
+                'legal_form': rform,
+                'address': address,
+            }
+            rec_account = {
+                'bank_name': f'Bank_{random.randint(1, banks)}',
+                'account_id': fake.unique.bban(),
+                'bic': f'BICR{i+1}',
+                'iban': f"CH{fake.unique.random_number(digits=19)}",
+                'account_type': random.choice(['current', 'business']),
+                'address': address,
+                'country_code': 'CH',
+                'name': rname,
+                'legal_form': rform,
+                'party_type': 'entity',
+                'balance_after': 0.0,
+            }
+            has_entity_receiver = True
+
+        receivers[pid]['account'] = rec_account
 
         if random.random() < multi_bank_prob:
             multi_bank_count += 1
@@ -445,12 +503,21 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
             stats['non_scenario'] += 1
             stats['labels']['local0_global0'] += 1
             tx_id += 1
-    sums = defaultdict(float)
+    sums_sender = defaultdict(float)
+    sums_receiver = defaultdict(float)
     for tx in transactions:
-        acc = tx['Transaction']['account']
-        sums[acc['account_id']] += tx['Transaction']['currency_amount']
+        amount = tx['Transaction']['currency_amount']
+        s_acc = tx['Transaction']['account']
+        sums_sender[s_acc['account_id']] += amount
+        r_acc = tx['Transaction']['beneficiary_account']
+        sums_receiver[r_acc['account_id']] += amount
     for acc in accounts.values():
-        acc['balance_after'] = round(sums.get(acc['account_id'], 0.0), 2)
+        acc['balance_after'] = round(sums_sender.get(acc['account_id'], 0.0), 2)
+    for recv in receivers.values():
+        r_acc = recv['account']
+        r_acc['balance_after'] = round(
+            r_acc.get('balance_after', 0.0) + sums_receiver.get(r_acc['account_id'], 0.0), 2
+        )
     return transactions, stats
 
 

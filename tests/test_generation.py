@@ -39,13 +39,20 @@ def test_address_consistency():
         recv = receivers[pid]
         assert recv['address'] == addr
         if recv['type'] == 'person':
-            assert recv['last_name'] == 'Unknown'
+            assert recv['last_name'] != 'Unknown'
             if p['type'] == 'person':
                 assert recv['first_name'] != p['first_name']
+                assert recv['last_name'] != p['last_name']
                 assert recv['birthdate'] != p['birthdate']
         for bank_accounts in accounts_by_bank.values():
             if pid in bank_accounts:
                 assert bank_accounts[pid]['address'] == addr
+
+
+def test_entity_presence():
+    parties, receivers, _ = _generate_sample()
+    assert any(p['type'] == 'entity' for p in parties.values())
+    assert any(r['type'] == 'entity' for r in receivers.values())
 
 
 def test_receiver_account_details():
@@ -63,18 +70,25 @@ def test_account_balance_and_receiver_address():
         1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
     )
-    sums = defaultdict(float)
+    sums_sender = defaultdict(float)
+    sums_receiver = defaultdict(float)
     for tx in txs:
         tdata = tx['Transaction']
-        acc = tdata['account']
-        sums[acc['account_id']] += tdata['currency_amount']
+        s_acc = tdata['account']
+        sums_sender[s_acc['account_id']] += tdata['currency_amount']
+        r_acc = tdata['beneficiary_account']
+        sums_receiver[r_acc['account_id']] += tdata['currency_amount']
         ben = tdata['beneficiary']
-        assert ben['address'] == acc['address']
+        assert ben['address'] == r_acc['address']
         if ben['type'] == 'person':
-            assert ben['last_name'] == 'Unknown'
+            assert ben['last_name'] != 'Unknown'
 
     for acc in accounts.values():
-        assert acc['balance_after'] == round(sums.get(acc['account_id'], 0.0), 2)
+        assert acc['balance_after'] == round(sums_sender.get(acc['account_id'], 0.0), 2)
+    for recv in receivers.values():
+        r_acc = recv['account']
+        expected = round(sums_receiver.get(r_acc['account_id'], 0.0), 2)
+        assert r_acc['balance_after'] == expected
 
 
 def test_large_cash_local_label():
