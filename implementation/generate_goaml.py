@@ -428,6 +428,8 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
         account = accounts[party_id]
         beneficiary = receivers[party_id]
         originator = parties[party_id]
+        last_ts = account.get('last_ts')
+        recv_last_ts = beneficiary['account'].get('last_ts')
         if random.random() < scenario_prob:
             total_amount = threshold * random.uniform(1.0, 2.0)
             splits = random.randint(1, max_splits)
@@ -441,11 +443,36 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                 rest = (total_amount - big) / (splits - 1 if splits > 1 else 1)
                 amounts = [big] + [rest] * (splits - 1)
                 random.shuffle(amounts)
-            base_time = now - timedelta(days=random.randint(0, days_back))
+            base_time = now - timedelta(
+                days=random.randint(0, days_back),
+                seconds=random.randint(0, 86400 - 1),
+            )
             for idx in range(splits):
-                ts = base_time if spacing == 'uniform' else base_time + timedelta(minutes=random.randint(1, 120) * idx)
+                ts = base_time if spacing == 'uniform' else base_time + timedelta(
+                    minutes=random.randint(1, 120) * idx
+                )
+                if last_ts and ts <= last_ts:
+                    ts = last_ts + timedelta(seconds=1)
+                if recv_last_ts and ts <= recv_last_ts:
+                    ts = recv_last_ts + timedelta(seconds=1)
+                last_ts = ts
+                recv_last_ts = ts
                 amount = round(amounts[idx], 2)
                 local_label = 1 if bank_knows and amount >= threshold else 0
+
+                sender_balance = account.setdefault('current_balance', account['initial_balance']) + amount
+                account['current_balance'] = sender_balance
+                acc_snapshot = account.copy()
+                acc_snapshot['balance_after'] = round(sender_balance, 2)
+                acc_snapshot['last_ts'] = None
+
+                recv_acc = beneficiary['account']
+                recv_balance = recv_acc.setdefault('current_balance', recv_acc['initial_balance']) + amount
+                recv_acc['current_balance'] = recv_balance
+                recv_snapshot = recv_acc.copy()
+                recv_snapshot['balance_after'] = round(recv_balance, 2)
+                recv_snapshot['last_ts'] = None
+
                 tdict = {
                     'Transaction': {
                         'transaction_id': f'B{bank_id}T{tx_id}',
@@ -456,11 +483,11 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                         'currency_amount': amount,
                         'currency_code': 'CHF',
                         'timestamp': int(ts.timestamp() * 1000),
-                        'account': account,
-                        'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')), 
+                        'account': acc_snapshot,
+                        'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
                         'transaction_beneficiary_country_code': 'CH',
                         'beneficiary': beneficiary,
-                        'beneficiary_account': beneficiary['account'],
+                        'beneficiary_account': recv_snapshot,
                         'local_label': local_label,
                         'global_label': 1,
                     }
@@ -476,9 +503,34 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                 tx_id += 1
                 if len(transactions) >= num_transactions:
                     break
+            account['last_ts'] = last_ts
+            beneficiary['account']['last_ts'] = recv_last_ts
         else:
-            ts = now - timedelta(days=random.randint(0, days_back))
+            ts = now - timedelta(
+                days=random.randint(0, days_back),
+                seconds=random.randint(0, 86400 - 1),
+            )
+            if last_ts and ts <= last_ts:
+                ts = last_ts + timedelta(seconds=1)
+            if recv_last_ts and ts <= recv_last_ts:
+                ts = recv_last_ts + timedelta(seconds=1)
+            last_ts = ts
+            recv_last_ts = ts
             amount = max(1, random.gauss(base_mean, base_std))
+
+            sender_balance = account.setdefault('current_balance', account['initial_balance']) + amount
+            account['current_balance'] = sender_balance
+            acc_snapshot = account.copy()
+            acc_snapshot['balance_after'] = round(sender_balance, 2)
+            acc_snapshot['last_ts'] = None
+
+            recv_acc = beneficiary['account']
+            recv_balance = recv_acc.setdefault('current_balance', recv_acc['initial_balance']) + amount
+            recv_acc['current_balance'] = recv_balance
+            recv_snapshot = recv_acc.copy()
+            recv_snapshot['balance_after'] = round(recv_balance, 2)
+            recv_snapshot['last_ts'] = None
+
             tdict = {
                 'Transaction': {
                     'transaction_id': f'B{bank_id}T{tx_id}',
@@ -489,11 +541,11 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                     'currency_amount': round(amount, 2),
                     'currency_code': 'CHF',
                     'timestamp': int(ts.timestamp() * 1000),
-                    'account': account,
+                    'account': acc_snapshot,
                     'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
                     'transaction_beneficiary_country_code': 'CH',
                     'beneficiary': beneficiary,
-                    'beneficiary_account': beneficiary['account'],
+                    'beneficiary_account': recv_snapshot,
                     'local_label': 0,
                     'global_label': 0,
                 }
@@ -502,23 +554,13 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
             stats['non_scenario'] += 1
             stats['labels']['local0_global0'] += 1
             tx_id += 1
-    sums_sender = defaultdict(float)
-    sums_receiver = defaultdict(float)
-    for tx in transactions:
-        amount = tx['Transaction']['currency_amount']
-        s_acc = tx['Transaction']['account']
-        sums_sender[s_acc['account_id']] += amount
-        r_acc = tx['Transaction']['beneficiary_account']
-        sums_receiver[r_acc['account_id']] += amount
+            account['last_ts'] = last_ts
+            beneficiary['account']['last_ts'] = recv_last_ts
     for acc in accounts.values():
-        acc['balance_after'] = round(
-            acc['initial_balance'] + sums_sender.get(acc['account_id'], 0.0), 2
-        )
+        acc['balance_after'] = round(acc.get('current_balance', acc['initial_balance']), 2)
     for recv in receivers.values():
         r_acc = recv['account']
-        r_acc['balance_after'] = round(
-            r_acc['initial_balance'] + sums_receiver.get(r_acc['account_id'], 0.0), 2
-        )
+        r_acc['balance_after'] = round(r_acc.get('current_balance', r_acc['initial_balance']), 2)
     return transactions, stats
 
 

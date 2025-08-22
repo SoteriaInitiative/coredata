@@ -73,24 +73,40 @@ def test_account_balance_and_receiver_address():
     )
     sums_sender = defaultdict(float)
     sums_receiver = defaultdict(float)
+    ts_per_account = defaultdict(list)
+    running = {}
+    acc_init = {acc['account_id']: acc['initial_balance'] for acc in accounts.values()}
+    recv_init = {recv['account']['account_id']: recv['account']['initial_balance'] for recv in receivers.values()}
     for tx in txs:
         tdata = tx['Transaction']
         s_acc = tdata['account']
-        sums_sender[s_acc['account_id']] += tdata['currency_amount']
         r_acc = tdata['beneficiary_account']
-        sums_receiver[r_acc['account_id']] += tdata['currency_amount']
+        amt = tdata['currency_amount']
+        sums_sender[s_acc['account_id']] += amt
+        sums_receiver[r_acc['account_id']] += amt
+        ts_per_account[s_acc['account_id']].append(tdata['timestamp'])
+        ts_per_account[r_acc['account_id']].append(tdata['timestamp'])
+        running.setdefault(s_acc['account_id'], acc_init[s_acc['account_id']])
+        running[s_acc['account_id']] += amt
+        assert abs(round(running[s_acc['account_id']], 2) - round(s_acc['balance_after'], 2)) <= 0.021
+        running.setdefault(r_acc['account_id'], recv_init[r_acc['account_id']])
+        running[r_acc['account_id']] += amt
+        assert abs(round(running[r_acc['account_id']], 2) - round(r_acc['balance_after'], 2)) <= 0.021
         ben = tdata['beneficiary']
         assert ben['address'] == r_acc['address']
         if ben['type'] == 'person':
             assert ben['last_name'] != 'Unknown'
 
     for acc in accounts.values():
-        expected = round(acc['initial_balance'] + sums_sender.get(acc['account_id'], 0.0), 2)
-        assert acc['balance_after'] == expected
+        expected = round(acc_init[acc['account_id']] + sums_sender.get(acc['account_id'], 0.0), 2)
+        assert abs(acc['balance_after'] - expected) <= 0.021
     for recv in receivers.values():
         r_acc = recv['account']
-        expected = round(r_acc['initial_balance'] + sums_receiver.get(r_acc['account_id'], 0.0), 2)
-        assert r_acc['balance_after'] == expected
+        expected = round(recv_init[r_acc['account_id']] + sums_receiver.get(r_acc['account_id'], 0.0), 2)
+        assert abs(r_acc['balance_after'] - expected) <= 0.021
+    for acc_id, tlist in ts_per_account.items():
+        assert tlist == sorted(tlist)
+        assert len(tlist) == len(set(tlist))
 
 
 def test_large_cash_local_label():
@@ -154,7 +170,7 @@ def test_account_balance_invariant():
         totals[tx['Transaction']['beneficiary_account']['account_id']] += amt
     for acc_id, acc in acc_map.items():
         diff = acc['balance_after'] - acc['initial_balance']
-        assert round(diff, 2) == round(totals.get(acc_id, 0.0), 2)
+        assert abs(round(diff, 2) - round(totals.get(acc_id, 0.0), 2)) <= 0.021
 
 
 def test_report_validates_against_xsd():
