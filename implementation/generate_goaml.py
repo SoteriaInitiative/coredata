@@ -262,6 +262,19 @@ def upload_report(xml_bytes, destination):
         pass
 
 
+def apply_global_labels(bank_transactions):
+    scenario_presence = defaultdict(set)
+    for bank_id, txs in bank_transactions.items():
+        for tx in txs:
+            if tx['Transaction'].get('scenario'):
+                scenario_presence[tx['Transaction']['transaction_originator']].add(bank_id)
+    for bank_id, txs in bank_transactions.items():
+        for tx in txs:
+            if tx['Transaction'].get('scenario'):
+                origin = tx['Transaction']['transaction_originator']
+                tx['Transaction']['global_label'] = 1 if len(scenario_presence[origin]) > 1 else 0
+
+
 def group_by_party(transactions):
     grouped = defaultdict(list)
     for tx in transactions:
@@ -436,13 +449,61 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
         'non_scenario': 0,
         'spacing': {'uniform': 0, 'scattered': 0},
         'distribution': {'uniform': 0, 'skewed': 0},
-        'labels': {'local1_global1': 0, 'local0_global1': 0, 'local0_global0': 0},
     }
     now = datetime.utcnow()
     base_mean = 1000
     base_std = 200
     threshold = base_mean + std_multiplier * base_std
     tx_id = 1
+
+    # Ensure each account receives at least one transaction
+    for party_id, account in accounts.items():
+        beneficiary = receivers[party_id]
+        originator = parties[party_id]
+        ts = now - timedelta(
+            days=random.randint(0, days_back),
+            seconds=random.randint(0, 86400 - 1),
+        )
+        amount = max(1, random.gauss(base_mean, base_std))
+        sender_balance = account.setdefault('current_balance', account['initial_balance']) + amount
+        account['current_balance'] = sender_balance
+        acc_snapshot = account.copy()
+        acc_snapshot['balance_after'] = round(sender_balance, 2)
+        acc_snapshot['last_ts'] = None
+
+        recv_acc = beneficiary['account']
+        recv_balance = recv_acc.setdefault('current_balance', recv_acc['initial_balance']) + amount
+        recv_acc['current_balance'] = recv_balance
+        recv_snapshot = recv_acc.copy()
+        recv_snapshot['balance_after'] = round(recv_balance, 2)
+        recv_snapshot['last_ts'] = None
+
+        tdict = {
+            'Transaction': {
+                'transaction_id': f'B{bank_id}T{tx_id}',
+                'transaction_originator': party_id,
+                'originator': originator,
+                'transaction_type': 'deposit',
+                'transaction_unit_type': 'cash',
+                'currency_amount': round(amount, 2),
+                'currency_code': 'CHF',
+                'timestamp': int(ts.timestamp() * 1000),
+                'account': acc_snapshot,
+                'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
+                'transaction_beneficiary_country_code': 'CH',
+                'beneficiary': beneficiary,
+                'beneficiary_account': recv_snapshot,
+                'local_label': 0,
+                'global_label': 0,
+                'scenario': False,
+            }
+        }
+        transactions.append(tdict)
+        stats['non_scenario'] += 1
+        tx_id += 1
+        account['last_ts'] = ts
+        beneficiary['account']['last_ts'] = ts
+
     while len(transactions) < num_transactions:
         party_id = random.choice(list(accounts.keys()))
         account = accounts[party_id]
@@ -509,17 +570,16 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                         'beneficiary': beneficiary,
                         'beneficiary_account': recv_snapshot,
                         'local_label': local_label,
-                        'global_label': 1,
+                        'global_label': 0,
+                        'scenario': True,
+                        'spacing': spacing,
+                        'distribution': distribution,
                     }
                 }
                 transactions.append(tdict)
                 stats['scenario'] += 1
                 stats['spacing'][spacing] += 1
                 stats['distribution'][distribution] += 1
-                if local_label:
-                    stats['labels']['local1_global1'] += 1
-                else:
-                    stats['labels']['local0_global1'] += 1
                 tx_id += 1
                 if len(transactions) >= num_transactions:
                     break
@@ -568,11 +628,11 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                     'beneficiary_account': recv_snapshot,
                     'local_label': 0,
                     'global_label': 0,
+                    'scenario': False,
                 }
             }
             transactions.append(tdict)
             stats['non_scenario'] += 1
-            stats['labels']['local0_global0'] += 1
             tx_id += 1
             account['last_ts'] = last_ts
             beneficiary['account']['last_ts'] = recv_last_ts
@@ -597,6 +657,7 @@ def generate_reports(args):
     }
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     folder = timestamp
+    bank_transactions = {}
     for bank_id in range(1, args.banks + 1):
         accounts = all_accounts[bank_id]
         if not accounts:
@@ -621,8 +682,11 @@ def generate_reports(args):
             global_stats['spacing'][key] += bank_stats['spacing'][key]
         for key in ['uniform', 'skewed']:
             global_stats['distribution'][key] += bank_stats['distribution'][key]
-        for key in global_stats['labels']:
-            global_stats['labels'][key] += bank_stats['labels'][key]
+        bank_transactions[bank_id] = txs
+
+    apply_global_labels(bank_transactions)
+
+    for bank_id, txs in bank_transactions.items():
         grouped = group_by_party(txs)
         for (originator, day), group in grouped.items():
             for i in range(0, len(group), 1000):
@@ -633,6 +697,17 @@ def generate_reports(args):
                 filename = f'Bank_{bank_id}_LargeCashDeposit_{originator}_{day}_{timestamp}_{i//1000 + 1}.xml'
                 path = f'{folder}/{filename}'
                 upload_report(xml_bytes, path)
+
+        for tx in txs:
+            local = tx['Transaction']['local_label']
+            global_l = tx['Transaction']['global_label']
+            if local == 1 and global_l == 1:
+                global_stats['labels']['local1_global1'] += 1
+            elif local == 0 and global_l == 1:
+                global_stats['labels']['local0_global1'] += 1
+            else:
+                global_stats['labels']['local0_global0'] += 1
+
     print('--- Generation Statistics ---')
     print(f"Scenario transactions: {global_stats['scenario']}")
     print(f"Non-scenario transactions: {global_stats['non_scenario']}")

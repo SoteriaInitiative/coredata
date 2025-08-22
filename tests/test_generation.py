@@ -221,3 +221,43 @@ def test_lei_client_number_and_beneficial_owner():
     acc_person = report_person.find('.//t_to_my_client/to_account')
     client_num_p = acc_person.findtext('client_number')
     assert client_num_p != '000000'
+
+
+def test_multibank_global_label():
+    random.seed(0)
+    generate_goaml.fake.seed_instance(0)
+    parties, receivers, accounts_by_bank, _ = generate_goaml.generate_parties(
+        num_parties=1, banks=2, multi_bank_prob=1.0, multi_bank_distribution=2
+    )
+    accounts1 = accounts_by_bank[1]
+    accounts2 = accounts_by_bank[2]
+    txs1, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts1, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=1.0, bank_knows=False, std_multiplier=2.0, max_splits=3
+    )
+    txs2, _ = generate_goaml.generate_transactions_for_bank(
+        2, accounts2, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=1.0, bank_knows=False, std_multiplier=2.0, max_splits=3
+    )
+    bank_txs = {1: txs1, 2: txs2}
+    generate_goaml.apply_global_labels(bank_txs)
+    for b_id, txs in bank_txs.items():
+        acc_ids = {acc['account_id'] for acc in accounts_by_bank[b_id].values()}
+        assert acc_ids.issubset({t['Transaction']['account']['account_id'] for t in txs})
+    for tx in txs1 + txs2:
+        if tx['Transaction']['scenario']:
+            assert tx['Transaction']['global_label'] == 1
+
+    txs1b, _ = generate_goaml.generate_transactions_for_bank(
+        1, accounts1, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=1.0, bank_knows=False, std_multiplier=2.0, max_splits=3
+    )
+    txs2b, _ = generate_goaml.generate_transactions_for_bank(
+        2, accounts2, receivers, parties, num_transactions=100, days_back=30,
+        scenario_prob=0.0, bank_knows=False, std_multiplier=2.0, max_splits=3
+    )
+    bank_txs2 = {1: txs1b, 2: txs2b}
+    generate_goaml.apply_global_labels(bank_txs2)
+    for tx in txs1b:
+        if tx['Transaction']['scenario']:
+            assert tx['Transaction']['global_label'] == 0
