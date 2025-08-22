@@ -133,6 +133,7 @@ Contributions are welcome! To get started:
 This release includes the following key features:
 - 95% of SWIFT attributes are covered but RTP identifiers are missing
 - Comprehensive personal identify attributes for entity identification
+- Synthetic goAML generator and exporter for multi-bank large cash scenarios
 
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
