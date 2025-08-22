@@ -205,6 +205,10 @@ def test_lei_client_number_and_beneficial_owner():
     assert any(form in name for form in generate_goaml.LEGAL_FORMS)
     client_num = acc_el.findtext('client_number')
     assert client_num != '000000'
+    rel_person = acc_el.find('related_persons/account_related_person/t_person')
+    assert rel_person.findtext('first_name') != 'Unknown'
+    assert rel_person.findtext('last_name') != 'Unknown'
+    assert rel_person.findtext('birthdate') != '1900-01-01T00:00:00'
     roles = [el.text for el in acc_el.findall('related_persons/account_related_person/role')]
     entity_rel = [el.text for el in acc_el.findall('related_entities/account_related_entity/account_entity_relation')]
     bo_count = sum(1 for r in roles if r in {'1', '2'}) + sum(1 for r in entity_rel if r in {'ACCCO'})

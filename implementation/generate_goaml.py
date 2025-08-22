@@ -382,6 +382,9 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 'client_number': fake.random_number(digits=6, fix_len=True),
                 'initial_balance': round(random.uniform(0, 1000), 2),
                 'balance_after': 0.0,
+                'first_name': fake.first_name(),
+                'last_name': fake.last_name(),
+                'birthdate': fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00'),
             }
             has_entity_receiver = True
 
@@ -417,6 +420,9 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 acc.update({
                     'name': party_info['name'],
                     'legal_form': party_info['legal_form'],
+                    'first_name': fake.first_name(),
+                    'last_name': fake.last_name(),
+                    'birthdate': fake.date_of_birth(minimum_age=18, maximum_age=90).strftime('%Y-%m-%dT00:00:00'),
                 })
             accounts[b][pid] = acc
     return parties, receivers, accounts, multi_bank_count
