@@ -2,3 +2,7 @@ google-cloud-storage
 numpy
 python-dotenv
 requests
+lxml
+xmlschema
+faker
+pytest

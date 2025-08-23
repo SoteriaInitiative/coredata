@@ -133,6 +133,31 @@ Contributions are welcome! To get started:
 This release includes the following key features:
 - 95% of SWIFT attributes are covered but RTP identifiers are missing
 - Comprehensive personal identify attributes for entity identification
+- Synthetic goAML generator and exporter for multi-bank large cash scenarios
+- goAML reports group same-day transactions by originator and track account balances
+- Reports use STR code and include standard indicators 1131V and 2003G
+- Export utility validates XML against the goAML XSD and can upload reports to Cloud Storage
+
+## goAML Export Usage
+Generate synthetic reports directly in goAML XML by running:
+
+```bash
+python implementation/go_aml_export.py --input example/Bank_1_transactions.json
+```
+
+The script groups transactions by originator and UTC day, recalculates account balances, validates against the XSD, and optionally uploads to the configured Cloud Storage bucket.
+
+## goAML Generation Usage
+Produce synthetic transactions and STR reports directly:
+
+```bash
+python implementation/generate_goaml.py --banks 3 --transactions 1000 --days 90 \
+  --scenario_probability '{"1":0.2,"2":0.1,"3":0.1}' \
+  --bank_knowledge '{"1":true,"2":false,"3":false}' \
+  --same_person_prob 0.9
+```
+
+The generator writes goAML XML without an intermediate JSON step and honors multi-bank, split-deposit scenarios.
 
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
