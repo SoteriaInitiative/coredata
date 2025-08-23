@@ -118,10 +118,12 @@ and median transaction amounts. The ``senders`` command lists all parties that
 initiate transactions. The ``receivers`` command lists only parties or entities
 that are determined to be ultimate beneficial owners (UBOs) of the receiving
 accounts. A UBO is resolved by first checking for an entity with relationship
-role ``BEOWN`` on the account and, if absent, falling back to any related person
-marked as a beneficial owner. The ``multi-bank`` command reports UBOs that hold
-accounts at more than one bank. Each query also reports how many accounts lacked
-sufficient information to determine a UBO.
+role ``BEOWN`` on the account that also includes an associated
+``entity_person`` with role ``3`` (Beneficial owner). If no such entity exists,
+the tool falls back to any related person marked as a beneficial owner.
+Each query reports both how many accounts lacked sufficient information to
+determine a UBO and how many listed more than one UBO. The ``multi-bank``
+command reports UBOs that hold accounts at more than one bank.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
