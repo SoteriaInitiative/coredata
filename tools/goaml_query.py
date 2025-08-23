@@ -518,7 +518,11 @@ def _extract_parties(tx: etree._Element) -> Tuple[Party, Party, set[str], set[st
             elif len(ubo_parties) > 1 and iban:
                 multi.add(iban)
     else:
-        sender = _extract_party_from_person_el(tx.find("t_from_my_client/from_person"))
+        from_ent = tx.find("t_from_my_client/from_entity/t_entity")
+        if from_ent is not None:
+            sender = _extract_party_from_entity_el(from_ent)
+        else:
+            sender = _extract_party_from_person_el(tx.find("t_from_my_client/from_person"))
 
     to_account = tx.find("t_to_my_client/to_account")
     if to_account is not None:
