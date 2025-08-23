@@ -199,7 +199,8 @@ Produce synthetic transactions and STR reports directly:
 ```bash
 python implementation/generate_goaml.py --banks 3 --transactions 1000 --days 90 \
   --scenario_probability '{"1":0.2,"2":0.1,"3":0.1}' \
-  --bank_knowledge '{"1":true,"2":false,"3":false}'
+  --bank_knowledge '{"1":true,"2":false,"3":false}' \
+  --same_person_prob 0.9
 ```
 
 The generator writes goAML XML without an intermediate JSON step and honors multi-bank, split-deposit scenarios.

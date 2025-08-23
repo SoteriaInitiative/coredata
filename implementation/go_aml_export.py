@@ -99,7 +99,12 @@ def _build_address(parent, address=None):
     """Attach an address element."""
     addr = etree.SubElement(parent, 'address')
     etree.SubElement(addr, 'address_type').text = '1'
-    address = address or {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'}
+    address = address or {
+        'address': 'Unknown',
+        'city': 'Unknown',
+        'country_code': generate_goaml.fake.current_country_code(),
+        'state': random.choice(generate_goaml.SWISS_CANTONS),
+    }
     etree.SubElement(addr, 'address').text = address['address']
     etree.SubElement(addr, 'city').text = address['city']
     etree.SubElement(addr, 'country_code').text = address['country_code']
@@ -113,7 +118,9 @@ def _build_person(parent, info):
     etree.SubElement(parent, 'first_name').text = info.get('first_name', 'Unknown')
     etree.SubElement(parent, 'last_name').text = info.get('last_name', 'Unknown')
     etree.SubElement(parent, 'birthdate').text = info.get('birthdate', '1900-01-01T00:00:00')
-    etree.SubElement(parent, 'nationality1').text = info.get('nationality', 'CH')
+    etree.SubElement(parent, 'nationality1').text = info.get(
+        'nationality', info.get('address', {}).get('country_code', 'CH')
+    )
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, info.get('address'))
 
@@ -129,7 +136,9 @@ def _build_entity(parent, info):
     etree.SubElement(parent, 'incorporation_number').text = fake.lei()
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, info.get('address'))
-    etree.SubElement(parent, 'incorporation_country_code').text = info.get('address', {}).get('country_code', 'CH')
+    etree.SubElement(parent, 'incorporation_country_code').text = info.get('address', {}).get(
+        'country_code', 'CH'
+    )
     etree.SubElement(parent, 'tax_reg_number').text = 'Yes'
 
 
@@ -255,8 +264,8 @@ def build_report(originator, day, transactions, currency_code_local, same_person
                     'address': {
                         'address': fake.street_address(),
                         'city': fake.city(),
-                        'country_code': 'CH',
-                        'state': 'ZH',
+                        'country_code': generate_goaml.fake.current_country_code(),
+                        'state': random.choice(generate_goaml.SWISS_CANTONS),
                     },
                 })
 
@@ -266,7 +275,9 @@ def build_report(originator, day, transactions, currency_code_local, same_person
             else:
                 fp = etree.SubElement(t_from, 'from_person')
                 _build_person(fp, originator)
-            from_country = originator.get('address', {}).get('country_code', tdata.get('account', {}).get('country_code', 'CH'))
+            from_country = originator.get('address', {}).get(
+                'country_code', tdata.get('account', {}).get('country_code', 'CH')
+            )
             if from_country == 'UK':
                 from_country = 'GB'
             etree.SubElement(t_from, 'from_country').text = from_country
@@ -300,8 +311,8 @@ def build_report(originator, day, transactions, currency_code_local, same_person
                         'address': {
                             'address': fake.street_address(),
                             'city': fake.city(),
-                            'country_code': 'CH',
-                            'state': 'ZH',
+                            'country_code': generate_goaml.fake.current_country_code(),
+                            'state': random.choice(generate_goaml.SWISS_CANTONS),
                         },
                     })
             _build_account(t_to, account_info, currency_code_local, date_str, 'to_account')

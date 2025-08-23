@@ -58,6 +58,11 @@ LEGAL_FORM_CODES = {
     "KG": "12",
 }
 
+SWISS_CANTONS = [
+    "AG","AI","AR","BE","BL","BS","FR","GE","GL","GR","JU","LU","NE","NW","OW",
+    "SG","SH","SO","SZ","TG","TI","UR","VD","VS","ZG","ZH"
+]
+
 
 def _build_address(parent, address):
     addr = etree.SubElement(parent, 'address')
@@ -74,7 +79,7 @@ def _build_person(parent, first_name, last_name, address, birthdate):
     etree.SubElement(parent, 'first_name').text = first_name
     etree.SubElement(parent, 'last_name').text = last_name
     etree.SubElement(parent, 'birthdate').text = birthdate
-    etree.SubElement(parent, 'nationality1').text = 'CH'
+    etree.SubElement(parent, 'nationality1').text = address.get('country_code', fake.country_code())
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
 
@@ -86,7 +91,7 @@ def _build_entity(parent, name, legal_form, address):
     etree.SubElement(parent, 'incorporation_number').text = fake.lei()
     addresses = etree.SubElement(parent, 'addresses')
     _build_address(addresses, address)
-    etree.SubElement(parent, 'incorporation_country_code').text = address.get('country_code', 'CH')
+    etree.SubElement(parent, 'incorporation_country_code').text = address.get('country_code', fake.country_code())
     etree.SubElement(parent, 'tax_reg_number').text = 'Yes'
 
 
@@ -105,7 +110,15 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'account_type').text = acc_type
     if account.get('party_type') == 'entity':
         related_entities = etree.SubElement(acc_el, 'related_entities')
-        addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        addr = account.get(
+            'address',
+            {
+                'address': 'Unknown',
+                'city': 'Unknown',
+                'country_code': fake.current_country_code(),
+                'state': random.choice(SWISS_CANTONS),
+            },
+        )
 
         # Account holder entity
         are_holder = etree.SubElement(related_entities, 'account_related_entity')
@@ -133,7 +146,15 @@ def _build_account(parent, account, currency_code_local, day, tag):
         related = etree.SubElement(acc_el, 'related_persons')
         arp = etree.SubElement(related, 'account_related_person')
         tp = etree.SubElement(arp, 't_person')
-        addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
+        addr = account.get(
+            'address',
+            {
+                'address': 'Unknown',
+                'city': 'Unknown',
+                'country_code': fake.current_country_code(),
+                'state': random.choice(SWISS_CANTONS),
+            },
+        )
         _build_person(
             tp,
             account.get('first_name', 'Unknown'),
@@ -208,7 +229,15 @@ def build_report(bank_id, originator, day, transactions, currency_code_local):
                 fp,
                 origin.get('first_name', 'Unknown'),
                 origin.get('last_name', 'Unknown'),
-                origin.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'}),
+                origin.get(
+                    'address',
+                    {
+                        'address': 'Unknown',
+                        'city': 'Unknown',
+                        'country_code': fake.current_country_code(),
+                        'state': random.choice(SWISS_CANTONS),
+                    },
+                ),
                 origin.get('birthdate', '1900-01-01T00:00:00'),
             )
         etree.SubElement(t_from, 'from_country').text = origin.get('address', {}).get('country_code', 'CH')
@@ -302,11 +331,13 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
     has_entity_receiver = False
     for i in range(num_parties):
         pid = f'P{i+1}'
+        country_code = fake.current_country_code()
+        state = random.choice(SWISS_CANTONS)
         address = {
             'address': fake.street_address(),
             'city': fake.city(),
-            'country_code': 'CH',
-            'state': 'ZH',
+            'country_code': country_code,
+            'state': state,
         }
 
         # Decide party type; ensure at least one entity overall
@@ -497,7 +528,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                 'timestamp': int(ts.timestamp() * 1000),
                 'account': acc_snapshot,
                 'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
-                'transaction_beneficiary_country_code': 'CH',
+                'transaction_beneficiary_country_code': beneficiary['address']['country_code'],
                 'beneficiary': beneficiary,
                 'beneficiary_account': recv_snapshot,
                 'local_label': 0,
@@ -538,7 +569,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
             'account': acc_snapshot,
             'beneficiary_account': acc_snapshot,
             'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
-            'transaction_beneficiary_country_code': 'CH',
+            'transaction_beneficiary_country_code': beneficiary['address']['country_code'],
             'beneficiary': beneficiary,
             'scenario': True,
         })
@@ -611,7 +642,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                         'timestamp': int(ts.timestamp() * 1000),
                         'account': acc_snapshot,
                         'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
-                        'transaction_beneficiary_country_code': 'CH',
+                        'transaction_beneficiary_country_code': beneficiary['address']['country_code'],
                         'beneficiary': beneficiary,
                         'beneficiary_account': recv_snapshot,
                         'local_label': local_label,
@@ -664,7 +695,7 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
                     'timestamp': int(ts.timestamp() * 1000),
                     'account': acc_snapshot,
                     'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
-                    'transaction_beneficiary_country_code': 'CH',
+                    'transaction_beneficiary_country_code': beneficiary['address']['country_code'],
                     'beneficiary': beneficiary,
                     'beneficiary_account': recv_snapshot,
                     'local_label': 0,

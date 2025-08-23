@@ -1,7 +1,8 @@
 import copy
 from datetime import datetime
 
-from implementation import go_aml_export
+
+from implementation import go_aml_export, generate_goaml
 
 
 def _base_transaction():
@@ -11,10 +12,11 @@ def _base_transaction():
         'last_name': 'Doe',
         'birthdate': '1980-01-01T00:00:00',
         'address': {
-            'address': 'Main St 1',
-            'city': 'Zurich',
-            'country_code': 'CH',
-            'state': 'ZH',
+        'address': 'Main St 1',
+        'city': 'Zurich',
+        'country_code': generate_goaml.fake.current_country_code(),
+        'state': 'ZH',
+
         },
     }
     account = {
@@ -27,10 +29,10 @@ def _base_transaction():
         'last_name': 'Smith',
         'birthdate': '1990-01-01T00:00:00',
         'address': {
-            'address': 'Other St 2',
-            'city': 'Bern',
-            'country_code': 'CH',
-            'state': 'BE',
+        'address': 'Other St 2',
+        'city': 'Bern',
+        'country_code': generate_goaml.fake.current_country_code(),
+        'state': 'BE',
         },
     }
     tx = {
