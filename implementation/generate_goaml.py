@@ -104,13 +104,35 @@ def _build_account(parent, account, currency_code_local, day, tag):
     etree.SubElement(acc_el, 'account_type').text = acc_type
     if account.get('party_type') == 'entity':
         related_entities = etree.SubElement(acc_el, 'related_entities')
-        are = etree.SubElement(related_entities, 'account_related_entity')
-        etree.SubElement(are, 'account_entity_relation').text = 'ACCCO'
-        ent = etree.SubElement(are, 'entity')
         addr = account.get('address', {'address': 'Unknown', 'city': 'Unknown', 'country_code': 'CH', 'state': 'ZH'})
-        _build_entity(ent, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
-        rr = etree.SubElement(are, 'relation_date_range')
-        etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
+
+        # Account holder entity
+        are_holder = etree.SubElement(related_entities, 'account_related_entity')
+        etree.SubElement(are_holder, 'account_entity_relation').text = 'ACCCO'
+        ent_holder = etree.SubElement(are_holder, 'entity')
+        _build_entity(ent_holder, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
+        rrh = etree.SubElement(are_holder, 'relation_date_range')
+        etree.SubElement(rrh, 'valid_from').text = f'{day}T00:00:00'
+
+        # Beneficial owner via entity_person
+        are_bo = etree.SubElement(related_entities, 'account_related_entity')
+        etree.SubElement(are_bo, 'account_entity_relation').text = 'BEOWN'
+        ent_bo = etree.SubElement(are_bo, 'entity')
+        _build_entity(ent_bo, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
+        entity_persons = etree.SubElement(ent_bo, 'entity_persons')
+        ep = etree.SubElement(entity_persons, 'entity_person')
+        tp_ep = etree.SubElement(ep, 't_person')
+        _build_person(
+            tp_ep,
+            account.get('first_name', 'Unknown'),
+            account.get('last_name', 'Unknown'),
+            addr,
+            account.get('birthdate', '1900-01-01T00:00:00'),
+        )
+        etree.SubElement(ep, 'entity_person_role_type').text = '3'
+        rrb = etree.SubElement(are_bo, 'relation_date_range')
+        etree.SubElement(rrb, 'valid_from').text = f'{day}T00:00:00'
+
         related_persons = etree.SubElement(acc_el, 'related_persons')
         arp = etree.SubElement(related_persons, 'account_related_person')
         tp = etree.SubElement(arp, 't_person')
@@ -136,7 +158,7 @@ def _build_account(parent, account, currency_code_local, day, tag):
             addr,
             account.get('birthdate', '1900-01-01T00:00:00'),
         )
-        etree.SubElement(arp, 'role').text = '1'
+        etree.SubElement(arp, 'role').text = '13'
         rr = etree.SubElement(arp, 'relation_date_range')
         etree.SubElement(rr, 'valid_from').text = f'{day}T00:00:00'
     etree.SubElement(acc_el, 'opened').text = f'{day}T00:00:00'
