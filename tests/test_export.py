@@ -35,3 +35,14 @@ def test_balance_updates_match_running_totals():
         assert acc['balance_before'] == round(running[aid], 2)
         running[aid] += tdata['currency_amount']
         assert acc['balance_after'] == round(running[aid], 2)
+
+
+def test_example_reports_validate():
+    data = go_aml_export.load_transactions('example/Bank_1_transactions.json')
+    go_aml_export.update_account_balances(data)
+    grouped = go_aml_export.group_by_party(data)
+    for idx, ((originator, day), txs) in enumerate(grouped.items()):
+        if idx >= 5:
+            break
+        report = go_aml_export.build_report(originator, day, txs, 'CHF')
+        go_aml_export.validate_report(report)
