@@ -99,7 +99,22 @@ gsutil cp gs://soteria-core-data/Bank_1_transactions.json .
 cat Bank_1_transactions.json | jq . | more
 ```
 
-6. Explore the data with the query tool (results are shown in tables with record counts):
+6. Explore the data with the query tool (results are shown in tables with record counts).
+   The CLI exposes the following subcommands and positional arguments:
+
+   | Command | Positional arguments | Description |
+   |---------|---------------------|-------------|
+   | `senders` | – | List unique sending parties |
+   | `receivers` | – | List unique receiving parties (UBOs) |
+   | `receivers-for [NAME]` | `NAME` | Receivers for the given sender (defaults to `$SENDER_NAME`) |
+   | `senders-for [NAME]` | `NAME` | Senders for the given receiver (defaults to `$RECEIVER_NAME`) |
+   | `transactions [FIRST_NAME] [LAST_NAME] [DOB]` | `FIRST_NAME` `LAST_NAME` `DOB` | All transactions for the party. Optional `--bank` and `--start-balance` flags refine the query. |
+   | `labels` | – | Transactions filtered by `--local` and `--global` label values |
+   | `multi-bank` | – | Parties holding accounts at more than one bank |
+   | `missing-ubos` | – | Accounts missing UBO information |
+
+   Example usage:
+
 ```zsh
 python tools/goaml_query.py receivers
 python tools/goaml_query.py labels --local 1 --global 1

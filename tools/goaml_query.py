@@ -16,6 +16,34 @@ The queries implemented are:
 6. Retrieve transactions flagged by local/global labels
 7. List parties that hold accounts at multiple banks
 
+Command names and positional arguments:
+
+``senders``
+    List unique sending parties. No positional arguments.
+
+``receivers``
+    List unique receiving parties. No positional arguments.
+
+``receivers-for [NAME]``
+    Receivers for the given sender ``NAME`` (falls back to ``SENDER_NAME``).
+
+``senders-for [NAME]``
+    Senders for the given receiver ``NAME`` (falls back to ``RECEIVER_NAME``).
+
+``transactions [FIRST_NAME] [LAST_NAME] [DOB]``
+    Transactions for the specified party. Defaults are read from
+    ``PARTY_FIRST_NAME``, ``PARTY_LAST_NAME`` and ``PARTY_DOB``. Optional
+    ``--bank`` and ``--start-balance`` flags refine the results.
+
+``labels``
+    Transactions filtered by ``--local`` and ``--global`` label values.
+
+``multi-bank``
+    Parties that maintain accounts at more than one bank.
+
+``missing-ubos``
+    Accounts missing ultimate beneficial owner information.
+
 For convenience many command line parameters can also be provided via
 environment variables:
 
