@@ -65,14 +65,16 @@ If terminal prints ``Your system is ready to brew`` everything worked OK.
 
 </details>
 
-3. Provide application configuration and create a service account on GCP and add a JSON key with edit permissions.
-Safe the key to ``gcp-credentials/gcp-key.json`` - create the gcp-credentials folder if you don't have it.
-Next, provide the proper application configurations. 
-Create a ``.env`` file in the implementation root ``coredata/implementation`` with
-the following content:
-```text
-GCS_BUCKET_NAME=soteria-core-data
-GOOGLE_APPLICATION_CREDENTIALS=gcp-credentials/gcp-key.json
+3. Provide application configuration and create a service account on GCP.  The
+query tool reads credentials directly from environment variables, so no JSON key
+file is required.  Set the following variables in your shell:
+```zsh
+export GCS_BUCKET_NAME=soteria-core-data
+export GCP_PROJECT_ID=<PROJECT_ID>
+export GCP_PRIVATE_KEY_ID=<KEY_ID>
+export GCP_PRIVATE_KEY="<BASE64_OR_MULTILINE_PRIVATE_KEY>"
+export GCP_CLIENT_EMAIL=<SERVICE_ACCOUNT_EMAIL>
+export GCP_CLIENT_ID=<CLIENT_ID>
 ```
 
 4. Set the Google Cloud parameters
@@ -96,6 +98,51 @@ To review the raw data for ``Bank_1`` on a terminal run:
 gsutil cp gs://soteria-core-data/Bank_1_transactions.json .
 cat Bank_1_transactions.json | jq . | more
 ```
+
+6. Explore the data with the query tool (results are shown in tables with record counts).
+   The CLI exposes the following subcommands and positional arguments:
+
+   | Command | Positional arguments | Description |
+   |---------|---------------------|-------------|
+   | `senders` | – | List unique sending parties |
+   | `receivers` | – | List unique receiving parties (UBOs) |
+   | `receivers-for [NAME]` | `NAME` | Receivers for the given sender (defaults to `$SENDER_NAME`) |
+   | `senders-for [NAME]` | `NAME` | Senders for the given receiver (defaults to `$RECEIVER_NAME`) |
+   | `transactions [FIRST_NAME] [LAST_NAME] [DOB]` | `FIRST_NAME` `LAST_NAME` `DOB` | All transactions for the party. Optional `--bank` and `--start-balance` flags refine the query. |
+   | `labels` | – | Transactions filtered by `--local` and `--global` label values |
+   | `multi-bank` | – | Parties holding accounts at more than one bank |
+   | `missing-ubos` | – | Accounts missing UBO information |
+
+   Example usage:
+
+```zsh
+python tools/goaml_query.py receivers
+python tools/goaml_query.py labels --local 1 --global 1
+python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
+python tools/goaml_query.py multi-bank
+python tools/goaml_query.py missing-ubos
+```
+Downloaded XML files are cached under ``.goaml_cache`` (override with
+``GOAML_CACHE_DIR``) to avoid repeat downloads between runs. The tool resolves
+party names from ``involved_parties`` sections so that
+senders and receivers are identified even when transactions only reference
+accounts. The ``transactions`` command reports both incoming and outgoing
+payments for the given party and displays transaction amount, account balance
+amount, running balance, and the local and global label flags for each record.
+After the table the command also prints the final balance along with the mean
+and median transaction amounts. The ``senders`` command lists all parties that
+initiate transactions. The ``receivers`` command lists only parties or entities
+that are determined to be ultimate beneficial owners (UBOs) of the receiving
+accounts. A UBO is resolved by first checking for an entity with relationship
+role ``BEOWN`` on the account that also includes an associated
+``entity_person`` with role ``3`` (Beneficial owner). If no such entity exists,
+the tool falls back to any related person marked as a beneficial owner.
+Each query reports both how many accounts lacked sufficient information to
+determine a UBO and how many listed more than one UBO. The ``multi-bank``
+command reports UBOs that hold accounts at more than one bank. The ``labels``
+command accepts ``--local`` and ``--global`` options to filter transactions by
+specific label values. The ``missing-ubos`` command lists any accounts missing
+UBO information along with the report filenames in which they appear.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
@@ -113,7 +160,6 @@ coredata/
 ├── documentation/              # Use cases & design documentation
 ├── example/                    # Example dataset implementing the standard
 ├── implementation/             # Example data generator and pattern editor
-├── gcp-credentials/            # Credentials for Google Cloud (you may need to create the folder)
 ├── standard/                   # Standard specification
 ├── README.md                   # This file
 └── LICENSE                     # License file
@@ -133,6 +179,30 @@ Contributions are welcome! To get started:
 This release includes the following key features:
 - 95% of SWIFT attributes are covered but RTP identifiers are missing
 - Comprehensive personal identify attributes for entity identification
+- Synthetic goAML generator and exporter for multi-bank large cash scenarios
+- goAML reports group same-day transactions by originator and track account balances
+- Reports use STR code and include standard indicators 1131V and 2003G
+- Export utility validates XML against the goAML XSD and can upload reports to Cloud Storage
+
+## goAML Export Usage
+Generate synthetic reports directly in goAML XML by running:
+
+```bash
+python implementation/go_aml_export.py --input example/Bank_1_transactions.json
+```
+
+The script groups transactions by originator and UTC day, recalculates account balances, validates against the XSD, and optionally uploads to the configured Cloud Storage bucket.
+
+## goAML Generation Usage
+Produce synthetic transactions and STR reports directly:
+
+```bash
+python implementation/generate_goaml.py --banks 3 --transactions 1000 --days 90 \
+  --scenario_probability '{"1":0.2,"2":0.1,"3":0.1}' \
+  --bank_knowledge '{"1":true,"2":false,"3":false}'
+```
+
+The generator writes goAML XML without an intermediate JSON step and honors multi-bank, split-deposit scenarios.
 
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
