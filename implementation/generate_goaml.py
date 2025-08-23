@@ -48,11 +48,13 @@ fake.add_provider(LeiProvider)
 
 LEGAL_FORMS = ["AG", "GmbH", "LLC", "S.A.", "KG"]
 LEGAL_FORM_CODES = {
-    "AG": "6",
-    "GmbH": "7",
-    "LLC": "13",
-    "S.A.": "14",
-    "KG": "15",
+    # Mapping aligned with goAML legal_form_type enumeration
+    # 8: Limited company, 9: LLC, 12: Private limited partnership
+    "AG": "8",
+    "GmbH": "9",
+    "LLC": "9",
+    "S.A.": "8",
+    "KG": "12",
 }
 
 

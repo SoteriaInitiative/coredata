@@ -3,6 +3,7 @@ import sys
 import random
 from collections import defaultdict
 from datetime import datetime
+from lxml import etree
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from implementation import generate_goaml
@@ -60,6 +61,18 @@ def test_receiver_account_details():
         for acc in recv['accounts'].values():
             assert acc['bank_name'].startswith('Bank_')
             assert acc['iban'].startswith('CH')
+
+
+def test_entity_legal_form_codes():
+    addr = {
+        'address': 'Teststrasse 1',
+        'city': 'Zurich',
+        'country_code': 'CH',
+        'state': 'ZH',
+    }
+    ent = etree.Element('entity')
+    generate_goaml._build_entity(ent, 'Example AG', 'AG', addr)
+    assert ent.findtext('incorporation_legal_form') == generate_goaml.LEGAL_FORM_CODES['AG']
 
 
 def test_account_balance_and_receiver_address():
