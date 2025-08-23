@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime
 
+
 from implementation import go_aml_export, generate_goaml
 
 
@@ -15,6 +16,7 @@ def _base_transaction():
         'city': 'Zurich',
         'country_code': generate_goaml.fake.current_country_code(),
         'state': 'ZH',
+
         },
     }
     account = {

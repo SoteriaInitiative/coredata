@@ -68,7 +68,6 @@ def test_entity_legal_form_codes():
         'address': 'Teststrasse 1',
         'city': 'Zurich',
         'country_code': generate_goaml.fake.current_country_code(),
-        'state': 'ZH',
     }
     ent = etree.Element('entity')
     generate_goaml._build_entity(ent, 'Example AG', 'AG', addr)
