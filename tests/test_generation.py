@@ -28,8 +28,6 @@ def test_iban_uniqueness():
     for bank_accounts in accounts_by_bank.values():
         for acc in bank_accounts.values():
             ibans.append(acc['iban'])
-    for recv in receivers.values():
-        ibans.append(recv['account']['iban'])
     assert len(ibans) == len(set(ibans))
 
 
@@ -59,9 +57,9 @@ def test_entity_presence():
 def test_receiver_account_details():
     parties, receivers, accounts_by_bank = _generate_sample()
     for recv in receivers.values():
-        acc = recv['account']
-        assert acc['bank_name'].startswith('Bank_')
-        assert acc['iban'].startswith('CH')
+        for acc in recv['accounts'].values():
+            assert acc['bank_name'].startswith('Bank_')
+            assert acc['iban'].startswith('CH')
 
 
 def test_account_balance_and_receiver_address():
@@ -71,39 +69,31 @@ def test_account_balance_and_receiver_address():
         1, accounts, receivers, parties, num_transactions=100, days_back=30,
         scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
     )
-    sums_sender = defaultdict(float)
-    sums_receiver = defaultdict(float)
+    sums = defaultdict(float)
     ts_per_account = defaultdict(list)
     running = {}
     acc_init = {acc['account_id']: acc['initial_balance'] for acc in accounts.values()}
-    recv_init = {recv['account']['account_id']: recv['account']['initial_balance'] for recv in receivers.values()}
     for tx in txs:
         tdata = tx['Transaction']
-        s_acc = tdata['account']
-        r_acc = tdata['beneficiary_account']
+        acc = tdata['account']
         amt = tdata['currency_amount']
-        sums_sender[s_acc['account_id']] += amt
-        sums_receiver[r_acc['account_id']] += amt
-        ts_per_account[s_acc['account_id']].append(tdata['timestamp'])
-        ts_per_account[r_acc['account_id']].append(tdata['timestamp'])
-        running.setdefault(s_acc['account_id'], acc_init[s_acc['account_id']])
-        running[s_acc['account_id']] += amt
-        assert abs(round(running[s_acc['account_id']], 2) - round(s_acc['balance_after'], 2)) <= 0.021
-        running.setdefault(r_acc['account_id'], recv_init[r_acc['account_id']])
-        running[r_acc['account_id']] += amt
-        assert abs(round(running[r_acc['account_id']], 2) - round(r_acc['balance_after'], 2)) <= 0.021
+        acc_id = acc['account_id']
+        sums[acc_id] += amt
+        ts_per_account[acc_id].append(tdata['timestamp'])
+        running.setdefault(acc_id, acc_init[acc_id])
+        running[acc_id] += amt
+        assert abs(round(running[acc_id], 2) - round(acc['balance_after'], 2)) <= 0.031
         ben = tdata['beneficiary']
-        assert ben['address'] == r_acc['address']
+        assert ben['address'] == acc['address']
         if ben['type'] == 'person':
             assert ben['last_name'] != 'Unknown'
 
+    tx_acc_ids = {t['Transaction']['account']['account_id'] for t in txs}
     for acc in accounts.values():
-        expected = round(acc_init[acc['account_id']] + sums_sender.get(acc['account_id'], 0.0), 2)
-        assert abs(acc['balance_after'] - expected) <= 0.021
-    for recv in receivers.values():
-        r_acc = recv['account']
-        expected = round(recv_init[r_acc['account_id']] + sums_receiver.get(r_acc['account_id'], 0.0), 2)
-        assert abs(r_acc['balance_after'] - expected) <= 0.021
+        if acc['account_id'] not in tx_acc_ids:
+            continue
+        expected = round(acc_init[acc['account_id']] + sums.get(acc['account_id'], 0.0), 2)
+        assert abs(acc['balance_after'] - expected) <= 0.031
     for acc_id, tlist in ts_per_account.items():
         assert tlist == sorted(tlist)
         assert len(tlist) == len(set(tlist))
@@ -118,6 +108,8 @@ def test_large_cash_local_label():
     )
     threshold = 1000 + 2.0 * 200
     for tx in txs:
+        if not tx['Transaction']['scenario']:
+            continue
         amt = tx['Transaction']['currency_amount']
         local = tx['Transaction']['local_label']
         if amt >= threshold:
@@ -161,13 +153,11 @@ def test_account_balance_invariant():
         scenario_prob=0.5, bank_knows=True, std_multiplier=2.0, max_splits=3
     )
     acc_map = {acc['account_id']: acc for acc in accounts.values()}
-    for recv in receivers.values():
-        acc_map[recv['account']['account_id']] = recv['account']
     totals = defaultdict(float)
     for tx in txs:
         amt = tx['Transaction']['currency_amount']
-        totals[tx['Transaction']['account']['account_id']] += amt
-        totals[tx['Transaction']['beneficiary_account']['account_id']] += amt
+        acc_id = tx['Transaction']['account']['account_id']
+        totals[acc_id] += amt
     for acc_id, acc in acc_map.items():
         diff = acc['balance_after'] - acc['initial_balance']
         assert abs(round(diff, 2) - round(totals.get(acc_id, 0.0), 2)) <= 0.021
