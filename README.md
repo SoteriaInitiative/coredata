@@ -102,9 +102,10 @@ cat Bank_1_transactions.json | jq . | more
 6. Explore the data with the query tool (results are shown in tables with record counts):
 ```zsh
 python tools/goaml_query.py receivers
-python tools/goaml_query.py labels --scope both
+python tools/goaml_query.py labels --local 1 --global 1
 python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
 python tools/goaml_query.py multi-bank
+python tools/goaml_query.py missing-ubos
 ```
 Downloaded XML files are cached under ``.goaml_cache`` (override with
 ``GOAML_CACHE_DIR``) to avoid repeat downloads between runs. The tool resolves
@@ -123,7 +124,10 @@ role ``BEOWN`` on the account that also includes an associated
 the tool falls back to any related person marked as a beneficial owner.
 Each query reports both how many accounts lacked sufficient information to
 determine a UBO and how many listed more than one UBO. The ``multi-bank``
-command reports UBOs that hold accounts at more than one bank.
+command reports UBOs that hold accounts at more than one bank. The ``labels``
+command accepts ``--local`` and ``--global`` options to filter transactions by
+specific label values. The ``missing-ubos`` command lists any accounts missing
+UBO information along with the report filenames in which they appear.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 

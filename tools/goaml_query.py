@@ -214,28 +214,40 @@ def _get_cache_dir() -> str:
     return os.getenv("GOAML_CACHE_DIR", ".goaml_cache")
 
 
-def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
+def load_transactions(
+    prefix: Optional[str] = None,
+    *,
+    return_sources: bool = False,
+) -> List[etree._Element] | List[Tuple[etree._Element, str]]:
     """Load all transaction elements from goAML XML reports in the bucket.
 
     Downloaded XML files are cached locally so subsequent runs avoid repeated
     network calls.  Set the ``GOAML_CACHE_DIR`` environment variable to override
-    the cache location.
+    the cache location.  When ``return_sources`` is ``True`` the returned list
+    contains tuples of ``(transaction_element, source_filename)``.
     """
 
     cache_root = _get_cache_dir()
     os.makedirs(cache_root, exist_ok=True)
 
+    def _collect(path: str, name: str, out: list) -> None:
+        root = etree.parse(path).getroot()
+        for tx in root.findall("transaction"):
+            if return_sources:
+                out.append((tx, name))
+            else:
+                out.append(tx)
+
     # When a prefix is provided and cached, avoid hitting the network entirely.
     if prefix is not None:
         cache_dir = os.path.join(cache_root, prefix)
         if os.path.isdir(cache_dir):
-            transactions: List[etree._Element] = []
+            transactions: List[Any] = []
             for name in os.listdir(cache_dir):
                 if not name.endswith(".xml"):
                     continue
                 path = os.path.join(cache_dir, name)
-                root = etree.parse(path).getroot()
-                transactions.extend(root.findall("transaction"))
+                _collect(path, name, transactions)
             return transactions
 
     client: Optional[storage.Client] = None
@@ -246,13 +258,12 @@ def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
         prefix = _get_latest_prefix(bucket)
     cache_dir = os.path.join(cache_root, prefix)
     if os.path.isdir(cache_dir):
-        transactions: List[etree._Element] = []
+        transactions: List[Any] = []
         for name in os.listdir(cache_dir):
             if not name.endswith(".xml"):
                 continue
             path = os.path.join(cache_dir, name)
-            root = etree.parse(path).getroot()
-            transactions.extend(root.findall("transaction"))
+            _collect(path, name, transactions)
         return transactions
 
     if client is None:
@@ -260,17 +271,22 @@ def load_transactions(prefix: Optional[str] = None) -> List[etree._Element]:
         bucket = client.bucket(_get_bucket_name())
 
     os.makedirs(cache_dir, exist_ok=True)
-    transactions: List[etree._Element] = []
+    transactions: List[Any] = []
     assert bucket is not None
     for blob in bucket.list_blobs(prefix=prefix):
         if not blob.name.endswith(".xml"):
             continue
         data = blob.download_as_bytes()
         filename = os.path.basename(blob.name)
-        with open(os.path.join(cache_dir, filename), "wb") as fh:
+        path = os.path.join(cache_dir, filename)
+        with open(path, "wb") as fh:
             fh.write(data)
         root = etree.fromstring(data)
-        transactions.extend(root.findall("transaction"))
+        for tx in root.findall("transaction"):
+            if return_sources:
+                transactions.append((tx, filename))
+            else:
+                transactions.append(tx)
     return transactions
 
 
@@ -697,19 +713,22 @@ def _parse_labels(tx: etree._Element) -> Dict[str, int]:
     }
 
 
-def labelled_transactions(transactions: Iterable[etree._Element], scope: str) -> List[LabeledTransaction]:
-    """Return transactions whose label flag is ``1`` for the given scope."""
+def labelled_transactions(
+    transactions: Iterable[etree._Element],
+    *,
+    local_label: Optional[int] = None,
+    global_label: Optional[int] = None,
+) -> List[LabeledTransaction]:
+    """Return transactions filtered by specific local/global label values."""
 
     results: List[LabeledTransaction] = []
     for tx in transactions:
         labels = _parse_labels(tx)
         local = labels["local_label"]
         global_ = labels["global_label"]
-        if scope == "local" and local != 1:
+        if local_label is not None and local != local_label:
             continue
-        if scope == "global" and global_ != 1:
-            continue
-        if scope == "both" and not (local == 1 and global_ == 1):
+        if global_label is not None and global_ != global_label:
             continue
 
         sender, receiver, _, _ = _extract_parties(tx)
@@ -741,6 +760,23 @@ def count_ubo_issues(transactions: Iterable[etree._Element]) -> Tuple[int, int]:
         unknown.update(missing)
         multi.update(many)
     return len(unknown), len(multi)
+
+
+def missing_ubo_accounts(
+    transactions_with_files: Iterable[Tuple[etree._Element, str]]
+) -> List[Dict[str, Any]]:
+    """Return accounts missing a UBO along with source file names."""
+
+    mapping: Dict[str, set[str]] = {}
+    for tx, fname in transactions_with_files:
+        _, _, missing, _ = _extract_parties(tx)
+        for iban in missing:
+            mapping.setdefault(iban, set()).add(fname)
+    rows = [
+        {"IBAN": iban, "Files": ", ".join(sorted(files))}
+        for iban, files in sorted(mapping.items())
+    ]
+    return rows
 
 
 def _print_table(rows: List[Dict[str, Any]]) -> None:
@@ -850,7 +886,9 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
 
 def _cmd_labels(args: argparse.Namespace) -> None:
     txs = load_transactions()
-    records = labelled_transactions(txs, args.scope)
+    records = labelled_transactions(
+        txs, local_label=args.local_label, global_label=args.global_label
+    )
     rows = [
         {
             "Timestamp": r.timestamp.isoformat(),
@@ -867,6 +905,12 @@ def _cmd_labels(args: argparse.Namespace) -> None:
     unknown, multi = count_ubo_issues(txs)
     print(f"Accounts without UBO: {unknown}")
     print(f"Accounts with multiple UBOs: {multi}")
+
+
+def _cmd_missing_ubos(args: argparse.Namespace) -> None:
+    txs = load_transactions(return_sources=True)
+    rows = missing_ubo_accounts(txs)
+    _print_table(rows)
 
 
 def _cmd_multibank(args: argparse.Namespace) -> None:
@@ -933,14 +977,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tx_cmd.set_defaults(func=_cmd_transactions)
 
-    lbl_cmd = sub.add_parser("labels", help="Transactions with label flag equal to 1")
+    lbl_cmd = sub.add_parser(
+        "labels", help="Transactions filtered by local/global label values"
+    )
     lbl_cmd.add_argument(
-        "--scope",
-        choices=["local", "global", "both"],
-        default="local",
-        help="Select which label to filter by",
+        "--local", dest="local_label", type=int, default=1,
+        help="Filter transactions by this local label value",
+    )
+    lbl_cmd.add_argument(
+        "--global", dest="global_label", type=int,
+        help="Filter transactions by this global label value",
     )
     lbl_cmd.set_defaults(func=_cmd_labels)
+
+    miss_cmd = sub.add_parser(
+        "missing-ubos", help="List accounts lacking UBO information"
+    )
+    miss_cmd.set_defaults(func=_cmd_missing_ubos)
 
     multi_cmd = sub.add_parser(
         "multi-bank", help="List parties with accounts at multiple banks"

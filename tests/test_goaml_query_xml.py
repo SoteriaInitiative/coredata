@@ -5,6 +5,7 @@ from tools.goaml_query import (
     related_parties,
     party_transactions,
     labelled_transactions,
+    missing_ubo_accounts,
     multibank_parties,
 )
 
@@ -383,9 +384,9 @@ LABEL_XML = '''
 def test_labelled_transactions():
     root = etree.fromstring(LABEL_XML)
     txs = root.findall('transaction')
-    assert len(labelled_transactions(txs, 'local')) == 2
-    assert len(labelled_transactions(txs, 'global')) == 2
-    assert len(labelled_transactions(txs, 'both')) == 1
+    assert len(labelled_transactions(txs, local_label=1)) == 2
+    assert len(labelled_transactions(txs, global_label=1)) == 2
+    assert len(labelled_transactions(txs, local_label=1, global_label=1)) == 1
 
 
 MULTI_ACCOUNT_XML = '''
@@ -642,3 +643,24 @@ def test_multiple_ubo_detection():
     receivers, unknown, multi = unique_parties(txs, 'receiving')
     assert {p.party.name for p in receivers} == {'Alice Alpha'}
     assert unknown == 0 and multi == 1
+
+
+MISSING_UBO_XML = '''
+<report>
+  <transaction>
+    <t_to_my_client>
+      <to_account>
+        <institution_name>BankM</institution_name>
+        <iban>NOUBO</iban>
+      </to_account>
+    </t_to_my_client>
+  </transaction>
+</report>
+'''
+
+
+def test_missing_ubo_accounts():
+    root = etree.fromstring(MISSING_UBO_XML)
+    tx = root.find('transaction')
+    rows = missing_ubo_accounts([(tx, 'f1.xml'), (tx, 'f2.xml')])
+    assert rows == [{'IBAN': 'NOUBO', 'Files': 'f1.xml, f2.xml'}]
