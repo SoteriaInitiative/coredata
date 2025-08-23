@@ -506,9 +506,9 @@ def _extract_parties(tx: etree._Element) -> Tuple[Party, Party, set[str], set[st
 
     owners, ubos, unknown, multi = _map_involved_parties(tx)
 
-    from_acc = tx.find("t_from_my_client/from_account") or tx.find(
-        "t_from_other/from_account"
-    )
+    from_acc = tx.find("t_from_my_client/from_account")
+    if from_acc is None:
+        from_acc = tx.find("t_from_other/from_account")
     if from_acc is not None:
         sender = _resolve_party_from_account(from_acc, owners)
         iban = from_acc.findtext("iban")
@@ -519,16 +519,19 @@ def _extract_parties(tx: etree._Element) -> Tuple[Party, Party, set[str], set[st
         elif len(ubo_parties) > 1 and iban:
             multi.add(iban)
     else:
-        from_ent = tx.find("t_from_my_client/from_entity/t_entity") or tx.find(
-            "t_from_other/from_entity/t_entity"
-        )
-        if from_ent is not None:
+        from_ent_wrapper = tx.find("t_from_my_client/from_entity")
+        if from_ent_wrapper is None:
+            from_ent_wrapper = tx.find("t_from_other/from_entity")
+        if from_ent_wrapper is not None:
+            from_ent = from_ent_wrapper.find("t_entity")
+            if from_ent is None:
+                from_ent = from_ent_wrapper
             sender = _extract_party_from_entity_el(from_ent)
         else:
-            sender = _extract_party_from_person_el(
-                tx.find("t_from_my_client/from_person")
-                or tx.find("t_from_other/from_person")
-            )
+            fp = tx.find("t_from_my_client/from_person")
+            if fp is None:
+                fp = tx.find("t_from_other/from_person")
+            sender = _extract_party_from_person_el(fp)
 
     to_account = tx.find("t_to_my_client/to_account")
     if to_account is not None:

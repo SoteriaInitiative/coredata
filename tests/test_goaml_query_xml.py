@@ -131,6 +131,66 @@ OTHER_ENTITY_XML = '''
 </report>
 '''
 
+ENTITY_DIRECT_XML = '''
+<report>
+  <transaction>
+    <t_from_my_client>
+      <from_entity>
+        <name>Direct Entity LLC</name>
+        <addresses>
+          <address>
+            <address>Main St 1</address>
+            <city>Metropolis</city>
+            <country_code>CH</country_code>
+          </address>
+        </addresses>
+      </from_entity>
+    </t_from_my_client>
+    <t_to_my_client>
+      <to_person>
+        <t_person>
+          <first_name>Bob</first_name>
+          <last_name>Receiver</last_name>
+          <birthdate>1980-02-02T00:00:00</birthdate>
+        </t_person>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>100.0</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+  </transaction>
+</report>
+'''
+
+OTHER_ENTITY_DIRECT_XML = '''
+<report>
+  <transaction>
+    <t_from_other>
+      <from_entity>
+        <name>Other Direct Entity LLC</name>
+        <addresses>
+          <address>
+            <address>Main St 1</address>
+            <city>Metropolis</city>
+            <country_code>CH</country_code>
+          </address>
+        </addresses>
+      </from_entity>
+    </t_from_other>
+    <t_to_my_client>
+      <to_person>
+        <t_person>
+          <first_name>Bob</first_name>
+          <last_name>Receiver</last_name>
+          <birthdate>1980-02-02T00:00:00</birthdate>
+        </t_person>
+      </to_person>
+    </t_to_my_client>
+    <amount_local>100.0</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+  </transaction>
+</report>
+'''
+
 def _transactions():
     root = etree.fromstring(SAMPLE_XML)
     return root.findall('transaction')
@@ -143,6 +203,16 @@ def _transactions_entity():
 
 def _transactions_other_entity():
     root = etree.fromstring(OTHER_ENTITY_XML)
+    return root.findall('transaction')
+
+
+def _transactions_entity_direct():
+    root = etree.fromstring(ENTITY_DIRECT_XML)
+    return root.findall('transaction')
+
+
+def _transactions_other_entity_direct():
+    root = etree.fromstring(OTHER_ENTITY_DIRECT_XML)
     return root.findall('transaction')
 
 def test_unique_parties_sender_receiver():
@@ -170,6 +240,20 @@ def test_from_other_entity_sender():
     txs = _transactions_other_entity()
     senders, u_s, m_s = unique_parties(txs, 'sending')
     assert {p.party.name for p in senders} == {'Garcia, Yang and Davidson LLC'}
+    assert u_s == 0 and m_s == 0
+
+
+def test_direct_entity_sender():
+    txs = _transactions_entity_direct()
+    senders, u_s, m_s = unique_parties(txs, 'sending')
+    assert {p.party.name for p in senders} == {'Direct Entity LLC'}
+    assert u_s == 0 and m_s == 0
+
+
+def test_direct_other_entity_sender():
+    txs = _transactions_other_entity_direct()
+    senders, u_s, m_s = unique_parties(txs, 'sending')
+    assert {p.party.name for p in senders} == {'Other Direct Entity LLC'}
     assert u_s == 0 and m_s == 0
 
 def test_related_and_transactions():
