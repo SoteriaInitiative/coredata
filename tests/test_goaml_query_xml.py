@@ -509,3 +509,10 @@ def test_multibank_parties():
     assert entry.party.name == 'Alice Smith'
     assert entry.party.role == 'UBO'
     assert set(entry.banks) == {'BankA', 'BankB'}
+
+
+def test_unique_parties_include_role():
+    txs = _transactions_multibank()
+    senders = unique_parties(txs, 'sending')
+    alice = next(p for p in senders if p.party.name == 'Alice Smith')
+    assert alice.party.role == 'UBO'

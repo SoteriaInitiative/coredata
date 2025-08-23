@@ -648,6 +648,7 @@ def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
             "Bank": stats.party.bank or "",
             "Address": stats.party.address or "",
             "IBAN": stats.party.iban or "",
+            "Role": stats.party.role or "",
             "Accounts": stats.account_count,
             "Incoming Tx": stats.incoming,
             "Outgoing Tx": stats.outgoing,
