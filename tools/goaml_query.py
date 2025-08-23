@@ -119,6 +119,28 @@ class MultiBankParty:
     banks: List[str]
 
 
+# Mapping of account-related person role codes to descriptive names from the
+# goAML XSD. The XML reports encode roles as numeric strings; resolving them
+# here yields human readable indicators in query results.
+ACCOUNT_ROLE_MAP = {
+    "1": "Addressee",
+    "6": "Other",
+    "7": "Control owner / Controller",
+    "13": "Beneficial owner",
+    "14": "Contracting party",
+    "15": "Power of attorney / Authorised signatory",
+    "17": "Sender of funds",
+    "18": "Receiver of funds",
+    "19": "Contracting party & Beneficial owner",
+    "20": "Contracting party & Control owner / controller",
+    "21": "Contracting party & Power of attorney / Authorised signatory",
+    "22": "Beneficial owner & Power of attorney / Authorised signatory",
+    "23": "Control owner/controller & Power of attorney / Authorised signatory",
+    "24": "Contracting party & Beneficial owner & Power of attorney/Authorised signatory",
+    "25": "Contracting party & Control owner/controller & Power of attorney/Authorised signatory",
+}
+
+
 # ---------------------------------------------------------------------------
 # Loading data from Cloud Storage
 # ---------------------------------------------------------------------------
@@ -325,7 +347,8 @@ def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Part
         iban = account_el.findtext("iban")
         rp = account_el.find("related_persons/account_related_person")
         if rp is not None:
-            role = rp.findtext("role")
+            role_code = rp.findtext("role")
+            role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
             person_el = rp.find("t_person")
             entity_el = rp.find("t_entity")
     if person_el is not None:
@@ -452,8 +475,9 @@ def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankP
         for acc in accounts:
             bank = acc.findtext("institution_name") or acc.findtext("swift")
             for rel in acc.findall("related_persons/account_related_person"):
-                role = rel.findtext("role")
-                if role != "UBO":
+                role_code = rel.findtext("role")
+                role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
+                if role != "Beneficial owner":
                     continue
                 person_el = rel.find("t_person")
                 if person_el is not None:

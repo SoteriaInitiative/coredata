@@ -443,7 +443,7 @@ MULTIBANK_XML = '''
         <iban>IBAN1</iban>
         <related_persons>
           <account_related_person>
-            <role>UBO</role>
+            <role>13</role>
             <t_person>
               <first_name>Alice</first_name>
               <last_name>Smith</last_name>
@@ -471,7 +471,7 @@ MULTIBANK_XML = '''
         <iban>IBAN2</iban>
         <related_persons>
           <account_related_person>
-            <role>UBO</role>
+            <role>13</role>
             <t_person>
               <first_name>Alice</first_name>
               <last_name>Smith</last_name>
@@ -507,7 +507,7 @@ def test_multibank_parties():
     assert len(parties) == 1
     entry = parties[0]
     assert entry.party.name == 'Alice Smith'
-    assert entry.party.role == 'UBO'
+    assert entry.party.role == 'Beneficial owner'
     assert set(entry.banks) == {'BankA', 'BankB'}
 
 
@@ -515,4 +515,4 @@ def test_unique_parties_include_role():
     txs = _transactions_multibank()
     senders = unique_parties(txs, 'sending')
     alice = next(p for p in senders if p.party.name == 'Alice Smith')
-    assert alice.party.role == 'UBO'
+    assert alice.party.role == 'Beneficial owner'
