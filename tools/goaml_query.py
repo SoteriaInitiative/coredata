@@ -70,6 +70,7 @@ class Party:
     bank: Optional[str] = None
     address: Optional[str] = None
     iban: Optional[str] = None
+    role: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -283,26 +284,55 @@ def _extract_party_from_person_el(
     *,
     bank: Optional[str] = None,
     iban: Optional[str] = None,
+    role: Optional[str] = None,
 ) -> Party:
     person_el = _unwrap_person_el(person_el)
     if person_el is None:
-        return Party(name="Unknown", bank=bank, iban=iban)
+        return Party(name="Unknown", bank=bank, iban=iban, role=role)
     first = person_el.findtext("first_name", "").strip()
     last = person_el.findtext("last_name", "").strip()
     name = " ".join(part for part in [first, last] if part) or "Unknown"
     dob = person_el.findtext("birthdate")
     addr = _format_address_el(person_el.find("addresses/address"))
-    return Party(name=name, dob=dob, bank=bank, address=addr, iban=iban)
+    return Party(name=name, dob=dob, bank=bank, address=addr, iban=iban, role=role)
+
+
+def _extract_party_from_entity_el(
+    entity_el: Optional[etree._Element],
+    *,
+    bank: Optional[str] = None,
+    iban: Optional[str] = None,
+    role: Optional[str] = None,
+) -> Party:
+    if entity_el is None:
+        return Party(name="Unknown", bank=bank, iban=iban, role=role)
+    name = (
+        entity_el.findtext("name")
+        or entity_el.findtext("entity_name")
+        or "Unknown"
+    )
+    dob = entity_el.findtext("incorporation_date")
+    addr = _format_address_el(entity_el.find("addresses/address"))
+    return Party(name=name, dob=dob, bank=bank, address=addr, iban=iban, role=role)
 
 
 def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Party:
     bank = iban = None
-    person_el = None
+    person_el = entity_el = None
+    role = None
     if account_el is not None:
         bank = account_el.findtext("institution_name") or account_el.findtext("swift")
         iban = account_el.findtext("iban")
-        person_el = account_el.find("related_persons/account_related_person/t_person")
-    return _extract_party_from_person_el(person_el, bank=bank, iban=iban)
+        rp = account_el.find("related_persons/account_related_person")
+        if rp is not None:
+            role = rp.findtext("role")
+            person_el = rp.find("t_person")
+            entity_el = rp.find("t_entity")
+    if person_el is not None:
+        return _extract_party_from_person_el(person_el, bank=bank, iban=iban, role=role)
+    if entity_el is not None:
+        return _extract_party_from_entity_el(entity_el, bank=bank, iban=iban, role=role)
+    return Party(name="Unknown", bank=bank, iban=iban, role=role)
 
 
 def _map_involved_parties(tx: etree._Element) -> Dict[str, Party]:
@@ -409,16 +439,31 @@ def unique_parties(
 
 
 def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankParty]:
-    """Return parties that hold accounts at more than one bank."""
+    """Return UBO parties that hold accounts at more than one bank."""
 
     mapping: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
     for tx in transactions:
-        sender, receiver = _extract_parties(tx)
-        for party in (sender, receiver):
-            key = (party.name, party.dob or "", party.address or "")
-            entry = mapping.setdefault(key, {"party": party, "banks": set()})
-            if party.bank:
-                entry["banks"].add(party.bank)
+        accounts = (
+            tx.findall(".//from_account")
+            + tx.findall(".//to_account")
+            + tx.findall(".//account")
+            + tx.findall(".//account_my_client")
+        )
+        for acc in accounts:
+            bank = acc.findtext("institution_name") or acc.findtext("swift")
+            for rel in acc.findall("related_persons/account_related_person"):
+                role = rel.findtext("role")
+                if role != "UBO":
+                    continue
+                person_el = rel.find("t_person")
+                if person_el is not None:
+                    party = _extract_party_from_person_el(person_el, bank=bank, role=role)
+                else:
+                    party = _extract_party_from_entity_el(rel.find("t_entity"), bank=bank, role=role)
+                key = (party.name, party.dob or "", party.role or "")
+                entry = mapping.setdefault(key, {"party": party, "banks": set()})
+                if bank:
+                    entry["banks"].add(bank)
 
     results: List[MultiBankParty] = []
     for data in mapping.values():
@@ -690,7 +735,7 @@ def _cmd_multibank(args: argparse.Namespace) -> None:
         {
             "Name": mb.party.name,
             "DOB": mb.party.dob or "",
-            "Address": mb.party.address or "",
+            "Role": mb.party.role or "",
             "Banks": ", ".join(mb.banks),
             "Count": len(mb.banks),
         }

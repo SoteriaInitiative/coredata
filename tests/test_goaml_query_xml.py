@@ -443,6 +443,7 @@ MULTIBANK_XML = '''
         <iban>IBAN1</iban>
         <related_persons>
           <account_related_person>
+            <role>UBO</role>
             <t_person>
               <first_name>Alice</first_name>
               <last_name>Smith</last_name>
@@ -470,6 +471,7 @@ MULTIBANK_XML = '''
         <iban>IBAN2</iban>
         <related_persons>
           <account_related_person>
+            <role>UBO</role>
             <t_person>
               <first_name>Alice</first_name>
               <last_name>Smith</last_name>
@@ -505,4 +507,5 @@ def test_multibank_parties():
     assert len(parties) == 1
     entry = parties[0]
     assert entry.party.name == 'Alice Smith'
+    assert entry.party.role == 'UBO'
     assert set(entry.banks) == {'BankA', 'BankB'}
