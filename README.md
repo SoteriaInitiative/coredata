@@ -115,13 +115,12 @@ payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
 After the table the command also prints the final balance along with the mean
  and median transaction amounts. The ``senders`` and ``receivers`` commands
- additionally show counts of incoming and outgoing transactions for each party,
- a ``Role`` column describing the party's relationship to the account (resolved
- from the numeric goAML role codes), and an
- ``Accounts`` column indicating how many distinct bank accounts are associated
- with each party. The ``multi-bank`` command lists parties or entities that act
- as ultimate beneficial owners (UBOs) on accounts held at more than one bank,
- including their role and the banks where they appear.
+ additionally show counts of incoming and outgoing transactions for each party
+ and an ``Accounts`` column indicating how many distinct bank accounts are
+ associated with each party. Only parties acting as ultimate beneficial owners
+ (UBOs) are listed. The ``multi-bank`` command lists parties or entities that
+ act as UBOs on accounts held at more than one bank, including their role and
+ the banks where they appear.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 

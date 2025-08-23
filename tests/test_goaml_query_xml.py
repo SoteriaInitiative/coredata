@@ -18,6 +18,7 @@ SAMPLE_XML = '''
         <balance>900.0</balance>
         <related_persons>
           <account_related_person>
+            <role>13</role>
             <t_person>
               <first_name>Alice</first_name>
               <last_name>Sender</last_name>
@@ -35,22 +36,27 @@ SAMPLE_XML = '''
       </from_account>
     </t_from_my_client>
     <t_to_my_client>
-      <to_person>
-        <first_name>Bob</first_name>
-        <last_name>Receiver</last_name>
-        <birthdate>1980-02-02T00:00:00</birthdate>
-        <addresses>
-          <address>
-            <address>Street2</address>
-            <city>City2</city>
-            <country_code>CH</country_code>
-          </address>
-        </addresses>
-      </to_person>
       <to_account>
         <institution_name>BankB</institution_name>
         <iban>IBAN2</iban>
         <balance>1100.0</balance>
+        <related_persons>
+          <account_related_person>
+            <role>13</role>
+            <t_person>
+              <first_name>Bob</first_name>
+              <last_name>Receiver</last_name>
+              <birthdate>1980-02-02T00:00:00</birthdate>
+              <addresses>
+                <address>
+                  <address>Street2</address>
+                  <city>City2</city>
+                  <country_code>CH</country_code>
+                </address>
+              </addresses>
+            </t_person>
+          </account_related_person>
+        </related_persons>
       </to_account>
     </t_to_my_client>
     <amount_local>100.0</amount_local>
@@ -102,12 +108,12 @@ INVOLVED_XML = '''
   <transaction>
     <involved_parties>
       <party>
-        <role>1</role>
         <account_my_client>
           <institution_name>BankA</institution_name>
           <iban>IBAN1</iban>
           <related_persons>
             <account_related_person>
+              <role>13</role>
               <t_person>
                 <first_name>Alice</first_name>
                 <last_name>Sender</last_name>
@@ -125,12 +131,12 @@ INVOLVED_XML = '''
         </account_my_client>
       </party>
       <party>
-        <role>2</role>
         <account>
           <institution_name>BankB</institution_name>
           <iban>IBAN2</iban>
           <related_persons>
             <account_related_person>
+              <role>13</role>
               <t_person>
                 <first_name>Bob</first_name>
                 <last_name>Receiver</last_name>
@@ -387,6 +393,7 @@ MULTI_ACCOUNT_XML = '''
         <iban>ACC1</iban>
         <related_persons>
           <account_related_person>
+            <role>13</role>
             <t_person><first_name>Alice</first_name><last_name>Sender</last_name></t_person>
           </account_related_person>
         </related_persons>
@@ -406,6 +413,7 @@ MULTI_ACCOUNT_XML = '''
         <iban>ACC2</iban>
         <related_persons>
           <account_related_person>
+            <role>13</role>
             <t_person><first_name>Alice</first_name><last_name>Sender</last_name></t_person>
           </account_related_person>
         </related_persons>
@@ -492,6 +500,27 @@ MULTIBANK_XML = '''
     <amount_local>2</amount_local>
     <date_transaction>2023-01-02T00:00:00</date_transaction>
   </transaction>
+  <transaction>
+    <t_from_my_client>
+      <from_account>
+        <institution_name>BankC</institution_name>
+        <iban>IBAN3</iban>
+        <related_persons>
+          <account_related_person>
+            <role>6</role>
+            <t_person>
+              <first_name>Charlie</first_name>
+              <last_name>Nonubo</last_name>
+              <birthdate>1985-05-05T00:00:00</birthdate>
+            </t_person>
+          </account_related_person>
+        </related_persons>
+      </from_account>
+    </t_from_my_client>
+    <t_to_my_client><to_person><first_name>Dave</first_name></to_person></t_to_my_client>
+    <amount_local>3</amount_local>
+    <date_transaction>2023-01-03T00:00:00</date_transaction>
+  </transaction>
 </report>
 '''
 
@@ -511,8 +540,8 @@ def test_multibank_parties():
     assert set(entry.banks) == {'BankA', 'BankB'}
 
 
-def test_unique_parties_include_role():
+def test_unique_parties_only_ubo():
     txs = _transactions_multibank()
     senders = unique_parties(txs, 'sending')
-    alice = next(p for p in senders if p.party.name == 'Alice Smith')
-    assert alice.party.role == 'Beneficial owner'
+    assert {p.party.name for p in senders} == {'Alice Smith'}
+    assert all(p.party.role == 'Beneficial owner' for p in senders)

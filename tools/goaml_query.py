@@ -393,6 +393,7 @@ def _resolve_party_from_account(
             bank=bank,
             address=mapped.address,
             iban=iban,
+            role=mapped.role,
         )
     return party
 
@@ -409,12 +410,21 @@ def _extract_parties(tx: etree._Element) -> (Party, Party):
         sender = _extract_party_from_person_el(tx.find("t_from_my_client/from_person"))
 
     to_person = tx.find("t_to_my_client/to_person")
+    to_account = tx.find("t_to_my_client/to_account")
     if to_person is not None:
-        bank = tx.findtext("t_to_my_client/to_account/institution_name")
-        iban = tx.findtext("t_to_my_client/to_account/iban")
-        receiver = _extract_party_from_person_el(to_person, bank=bank, iban=iban)
+        bank = to_account.findtext("institution_name") if to_account is not None else None
+        iban = to_account.findtext("iban") if to_account is not None else None
+        role = None
+        if iban and iban in mapping:
+            role = mapping[iban].role
+        elif to_account is not None:
+            rp = to_account.find("related_persons/account_related_person")
+            if rp is not None:
+                role_code = rp.findtext("role")
+                role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
+        receiver = _extract_party_from_person_el(to_person, bank=bank, iban=iban, role=role)
     else:
-        receiver = _resolve_party_from_account(tx.find("t_to_my_client/to_account"), mapping)
+        receiver = _resolve_party_from_account(to_account, mapping)
 
     return sender, receiver
 
@@ -430,16 +440,18 @@ def unique_parties(
 
     for tx in transactions:
         sender, receiver = _extract_parties(tx)
-        parties[sender.name] = sender
-        parties[receiver.name] = receiver
 
-        counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
-        counts.setdefault(receiver.name, {"incoming": 0, "outgoing": 0})["incoming"] += 1
+        if sender.role == "Beneficial owner":
+            parties[sender.name] = sender
+            counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
+            if sender.iban:
+                accounts.setdefault(sender.name, set()).add(sender.iban)
 
-        if sender.iban:
-            accounts.setdefault(sender.name, set()).add(sender.iban)
-        if receiver.iban:
-            accounts.setdefault(receiver.name, set()).add(receiver.iban)
+        if receiver.role == "Beneficial owner":
+            parties[receiver.name] = receiver
+            counts.setdefault(receiver.name, {"incoming": 0, "outgoing": 0})["incoming"] += 1
+            if receiver.iban:
+                accounts.setdefault(receiver.name, set()).add(receiver.iban)
 
     results: List[PartyTxCounts] = []
     for name, party in parties.items():
@@ -672,7 +684,6 @@ def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
             "Bank": stats.party.bank or "",
             "Address": stats.party.address or "",
             "IBAN": stats.party.iban or "",
-            "Role": stats.party.role or "",
             "Accounts": stats.account_count,
             "Incoming Tx": stats.incoming,
             "Outgoing Tx": stats.outgoing,
