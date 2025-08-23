@@ -276,3 +276,39 @@ def test_multibank_global_label():
     for tx in txs1b:
         if tx['Transaction']['scenario']:
             assert tx['Transaction']['global_label'] == 0
+
+
+def test_cross_bank_same_day():
+    random.seed(0)
+    generate_goaml.fake.seed_instance(0)
+    parties, receivers, accounts_by_bank, multi_parties = generate_goaml.generate_parties(
+        num_parties=1, banks=3, multi_bank_prob=1.0, multi_bank_distribution=3
+    )
+    events = generate_goaml.schedule_multi_bank_transactions(
+        accounts_by_bank, receivers, parties, multi_parties, days_back=30, std_multiplier=2.0
+    )
+    bank_txs = {}
+    for bank_id in range(1, 4):
+        txs, _ = generate_goaml.generate_transactions_for_bank(
+            bank_id,
+            accounts_by_bank[bank_id],
+            receivers,
+            parties,
+            num_transactions=100,
+            days_back=30,
+            scenario_prob=0.0,
+            bank_knows=True,
+            std_multiplier=2.0,
+            max_splits=3,
+            preseeded=events.get(bank_id, []),
+        )
+        bank_txs[bank_id] = txs
+    pid = multi_parties[0]
+    dates = []
+    for bank_id in range(1, 4):
+        tx = next(
+            t for t in bank_txs[bank_id] if t['Transaction']['transaction_originator'] == pid and t['Transaction']['scenario']
+        )
+        day = datetime.utcfromtimestamp(tx['Transaction']['timestamp'] / 1000).date()
+        dates.append(day)
+    assert all(d == dates[0] for d in dates)

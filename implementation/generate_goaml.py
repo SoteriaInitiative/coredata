@@ -297,7 +297,7 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
     parties = {}
     receivers = {}
     accounts = {b: {} for b in range(1, banks + 1)}
-    multi_bank_count = 0
+    multi_bank_parties = []
     has_entity_party = False
     has_entity_receiver = False
     for i in range(num_parties):
@@ -375,9 +375,9 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
             has_entity_receiver = True
 
         if random.random() < multi_bank_prob:
-            multi_bank_count += 1
             n_banks = random.randint(2, min(multi_bank_distribution, banks))
             bank_ids = random.sample(range(1, banks + 1), n_banks)
+            multi_bank_parties.append(pid)
         else:
             bank_ids = [random.randint(1, banks)]
 
@@ -412,11 +412,48 @@ def generate_parties(num_parties, banks, multi_bank_prob, multi_bank_distributio
                 })
             receivers[pid]['accounts'][b] = acc
             accounts[b][pid] = acc
-    return parties, receivers, accounts, multi_bank_count
+    return parties, receivers, accounts, multi_bank_parties
+
+
+def schedule_multi_bank_transactions(accounts_by_bank, receivers, parties, multi_bank_parties, days_back, std_multiplier):
+    events_by_bank = defaultdict(list)
+    now = datetime.utcnow()
+    base_mean = 1000
+    base_std = 200
+    threshold = base_mean + std_multiplier * base_std
+    for pid in multi_bank_parties:
+        banks = [b for b, accs in accounts_by_bank.items() if pid in accs]
+        if len(banks) < 2:
+            continue
+        base_time = now - timedelta(days=random.randint(0, days_back), seconds=random.randint(0, 86400 - 1))
+        total_amount = threshold * random.uniform(1.0, 2.0)
+        distribution = random.choice(['uniform', 'skewed'])
+        if distribution == 'uniform':
+            amounts = [total_amount / len(banks)] * len(banks)
+        else:
+            big = total_amount * 0.8
+            rest = (total_amount - big) / (len(banks) - 1)
+            amounts = [big] + [rest] * (len(banks) - 1)
+            random.shuffle(amounts)
+        for idx, bank_id in enumerate(banks):
+            ts = base_time + timedelta(minutes=random.randint(1, 120) * idx)
+            event = {
+                'Transaction': {
+                    'transaction_originator': pid,
+                    'beneficiary_id': pid,
+                    'currency_amount': round(amounts[idx], 2),
+                    'currency_code': 'CHF',
+                    'timestamp': int(ts.timestamp() * 1000),
+                },
+                'spacing': 'scattered',
+                'distribution': distribution,
+            }
+            events_by_bank[bank_id].append(event)
+    return events_by_bank
 
 
 def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_transactions, days_back, scenario_prob, bank_knows,
-                                   std_multiplier, max_splits):
+                                   std_multiplier, max_splits, preseeded=None):
     transactions = []
     stats = {
         'scenario': 0,
@@ -470,6 +507,48 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
         }
         transactions.append(tdict)
         stats['non_scenario'] += 1
+        tx_id += 1
+        account['last_ts'] = ts
+        beneficiary['accounts'][bank_id]['last_ts'] = ts
+
+    # Preseeded cross-bank scenario events
+    preseeded = preseeded or []
+    for seed in preseeded:
+        party_id = seed['Transaction']['transaction_originator']
+        account = accounts[party_id]
+        beneficiary = receivers[party_id]
+        originator = parties[party_id]
+        ts = datetime.utcfromtimestamp(seed['Transaction']['timestamp'] / 1000)
+        last_ts = account.get('last_ts')
+        recv_last_ts = beneficiary['accounts'][bank_id].get('last_ts')
+        if last_ts and ts <= last_ts:
+            ts = last_ts + timedelta(seconds=1)
+        if recv_last_ts and ts <= recv_last_ts:
+            ts = recv_last_ts + timedelta(seconds=1)
+        amount = seed['Transaction']['currency_amount']
+        recv_acc = beneficiary['accounts'][bank_id]
+        balance = recv_acc.setdefault('current_balance', recv_acc['initial_balance']) + amount
+        recv_acc['current_balance'] = balance
+        acc_snapshot = recv_acc.copy()
+        acc_snapshot['balance_after'] = round(balance, 2)
+        acc_snapshot['last_ts'] = None
+        seed['Transaction'].update({
+            'transaction_id': f'B{bank_id}T{tx_id}',
+            'originator': originator,
+            'account': acc_snapshot,
+            'beneficiary_account': acc_snapshot,
+            'transaction_beneficiary': beneficiary.get('first_name', beneficiary.get('name', '')),
+            'transaction_beneficiary_country_code': 'CH',
+            'beneficiary': beneficiary,
+            'scenario': True,
+        })
+        local_label = 1 if bank_knows and amount >= threshold else 0
+        seed['Transaction']['local_label'] = local_label
+        seed['Transaction']['global_label'] = 1
+        transactions.append(seed)
+        stats['scenario'] += 1
+        stats['spacing'][seed.get('spacing', 'uniform')] += 1
+        stats['distribution'][seed.get('distribution', 'uniform')] += 1
         tx_id += 1
         account['last_ts'] = ts
         beneficiary['accounts'][bank_id]['last_ts'] = ts
@@ -607,8 +686,12 @@ def generate_transactions_for_bank(bank_id, accounts, receivers, parties, num_tr
 
 
 def generate_reports(args):
-    parties, receivers, all_accounts, multi_bank_count = generate_parties(
+    parties, receivers, all_accounts, multi_bank_parties = generate_parties(
         args.parties, args.banks, args.multi_bank_prob, args.multi_bank_distribution
+    )
+    multi_bank_count = len(multi_bank_parties)
+    cross_bank_events = schedule_multi_bank_transactions(
+        all_accounts, receivers, parties, multi_bank_parties, args.days, args.std_multiplier
     )
     global_stats = {
         'scenario': 0,
@@ -626,6 +709,7 @@ def generate_reports(args):
             continue
         scenario_prob = args.scenario_probability.get(str(bank_id), args.default_scenario_prob)
         bank_knows = args.bank_knowledge.get(str(bank_id), True)
+        preseeded = cross_bank_events.get(bank_id, [])
         txs, bank_stats = generate_transactions_for_bank(
             bank_id,
             accounts,
@@ -637,6 +721,7 @@ def generate_reports(args):
             bank_knows,
             args.std_multiplier,
             args.max_splits,
+            preseeded,
         )
         for key in ['scenario', 'non_scenario']:
             global_stats[key] += bank_stats[key]
