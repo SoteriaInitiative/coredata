@@ -338,7 +338,7 @@ def _extract_party_from_entity_el(
     return Party(name=name, dob=dob, bank=bank, address=addr, iban=iban, role=role)
 
 
-def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Party:
+def _extract_owner_from_account_el(account_el: Optional[etree._Element]) -> Party:
     bank = iban = None
     person_el = entity_el = None
     role = None
@@ -351,6 +351,10 @@ def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Part
             role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
             person_el = rp.find("t_person")
             entity_el = rp.find("t_entity")
+        if person_el is None and entity_el is None:
+            ent = account_el.find("related_entities/account_entity/t_entity")
+            if ent is not None:
+                entity_el = ent
     if person_el is not None:
         return _extract_party_from_person_el(person_el, bank=bank, iban=iban, role=role)
     if entity_el is not None:
@@ -358,27 +362,75 @@ def _extract_party_from_account_el(account_el: Optional[etree._Element]) -> Part
     return Party(name="Unknown", bank=bank, iban=iban, role=role)
 
 
-def _map_involved_parties(tx: etree._Element) -> Dict[str, Party]:
-    """Map account IBANs to parties described in ``involved_parties``."""
+def _ubo_party_from_account_el(
+    account_el: Optional[etree._Element],
+    mapping: Dict[str, Party],
+) -> Tuple[Optional[Party], bool]:
+    """Return the UBO party for the account if determinable."""
 
-    mapping: Dict[str, Party] = {}
+    bank = iban = None
+    if account_el is not None:
+        bank = account_el.findtext("institution_name") or account_el.findtext("swift")
+        iban = account_el.findtext("iban")
+        for ent in account_el.findall("related_entities/account_entity"):
+            if ent.findtext("relationship_role") == "BEOWN":
+                party = _extract_party_from_entity_el(
+                    ent.find("t_entity"), bank=bank, iban=iban, role="Beneficial owner"
+                )
+                return party, True
+        for rp in account_el.findall("related_persons/account_related_person"):
+            role_code = rp.findtext("role")
+            role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
+            if role == "Beneficial owner":
+                party = _extract_party_from_person_el(
+                    rp.find("t_person"), bank=bank, iban=iban, role=role
+                )
+                return party, True
+    if account_el is not None and (iban := account_el.findtext("iban")):
+        if iban in mapping:
+            mapped = mapping[iban]
+            return (
+                Party(
+                    name=mapped.name,
+                    dob=mapped.dob,
+                    bank=bank or mapped.bank,
+                    address=mapped.address,
+                    iban=iban,
+                    role=mapped.role,
+                ),
+                mapped.role == "Beneficial owner",
+            )
+    return (None, False)
+
+
+def _map_involved_parties(tx: etree._Element) -> Tuple[Dict[str, Party], Dict[str, Party], set[str]]:
+    """Map account IBANs to owner parties and UBO parties."""
+
+    owners: Dict[str, Party] = {}
+    ubos: Dict[str, Party] = {}
+    unknown: set[str] = set()
     for party_el in tx.findall("involved_parties/party"):
         account_el = party_el.find("account_my_client")
         if account_el is None:
             account_el = party_el.find("account")
         if account_el is None:
             continue
-        party = _extract_party_from_account_el(account_el)
+        owner = _extract_owner_from_account_el(account_el)
         iban = account_el.findtext("iban")
         if iban:
-            mapping[iban] = party
-    return mapping
+            owners[iban] = owner
+            ubo, known = _ubo_party_from_account_el(account_el, {})
+            if known and ubo is not None:
+                ubos[iban] = ubo
+            else:
+                unknown.add(iban)
+    return owners, ubos, unknown
 
 
 def _resolve_party_from_account(
     account_el: Optional[etree._Element], mapping: Dict[str, Party]
 ) -> Party:
-    party = _extract_party_from_account_el(account_el)
+    party = _extract_owner_from_account_el(account_el)
     if (
         party.name == "Unknown"
         and account_el is not None
@@ -398,54 +450,56 @@ def _resolve_party_from_account(
     return party
 
 
-def _extract_parties(tx: etree._Element) -> (Party, Party):
-    """Return sender and receiver parties for a transaction."""
+def _extract_parties(tx: etree._Element) -> Tuple[Party, Party, set[str]]:
+    """Return sender and receiver parties along with unknown UBO accounts."""
 
-    mapping = _map_involved_parties(tx)
+    owners, ubos, unknown = _map_involved_parties(tx)
 
     from_acc = tx.find("t_from_my_client/from_account")
     if from_acc is not None:
-        sender = _resolve_party_from_account(from_acc, mapping)
+        sender = _resolve_party_from_account(from_acc, owners)
+        _, known = _ubo_party_from_account_el(from_acc, ubos)
+        if not known and (iban := from_acc.findtext("iban")):
+            unknown.add(iban)
     else:
         sender = _extract_party_from_person_el(tx.find("t_from_my_client/from_person"))
 
-    to_person = tx.find("t_to_my_client/to_person")
     to_account = tx.find("t_to_my_client/to_account")
-    if to_person is not None:
-        bank = to_account.findtext("institution_name") if to_account is not None else None
-        iban = to_account.findtext("iban") if to_account is not None else None
-        role = None
-        if iban and iban in mapping:
-            role = mapping[iban].role
-        elif to_account is not None:
-            rp = to_account.find("related_persons/account_related_person")
-            if rp is not None:
-                role_code = rp.findtext("role")
-                role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
-        receiver = _extract_party_from_person_el(to_person, bank=bank, iban=iban, role=role)
+    if to_account is not None:
+        receiver, known = _ubo_party_from_account_el(to_account, ubos)
+        if not known and (iban := to_account.findtext("iban")):
+            unknown.add(iban)
+        if receiver is None:
+            receiver = Party(
+                name="Unknown",
+                bank=to_account.findtext("institution_name") or to_account.findtext("swift"),
+                iban=to_account.findtext("iban"),
+            )
     else:
-        receiver = _resolve_party_from_account(to_account, mapping)
+        to_person = tx.find("t_to_my_client/to_person")
+        receiver = _extract_party_from_person_el(to_person)
 
-    return sender, receiver
+    return sender, receiver, unknown
 
 
 def unique_parties(
     transactions: Iterable[etree._Element], role: str
-) -> List[PartyTxCounts]:
-    """Return unique parties with transaction counts for the given role."""
+) -> Tuple[List[PartyTxCounts], int]:
+    """Return unique parties with transaction counts and unknown UBOs."""
 
     parties: Dict[str, Party] = {}
     counts: Dict[str, Dict[str, int]] = {}
     accounts: Dict[str, set[str]] = {}
+    unknown_accounts: set[str] = set()
 
     for tx in transactions:
-        sender, receiver = _extract_parties(tx)
+        sender, receiver, unknown = _extract_parties(tx)
+        unknown_accounts.update(unknown)
 
-        if sender.role == "Beneficial owner":
-            parties[sender.name] = sender
-            counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
-            if sender.iban:
-                accounts.setdefault(sender.name, set()).add(sender.iban)
+        parties[sender.name] = sender
+        counts.setdefault(sender.name, {"incoming": 0, "outgoing": 0})["outgoing"] += 1
+        if sender.iban:
+            accounts.setdefault(sender.name, set()).add(sender.iban)
 
         if receiver.role == "Beneficial owner":
             parties[receiver.name] = receiver
@@ -470,14 +524,17 @@ def unique_parties(
                 account_count=account_count,
             )
         )
-    return results
+    return results, len(unknown_accounts)
 
 
-def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankParty]:
+def multibank_parties(transactions: Iterable[etree._Element]) -> Tuple[List[MultiBankParty], int]:
     """Return UBO parties that hold accounts at more than one bank."""
 
     mapping: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    unknown_accounts: set[str] = set()
     for tx in transactions:
+        owners, ubos, unknown = _map_involved_parties(tx)
+        unknown_accounts.update(unknown)
         accounts = (
             tx.findall(".//from_account")
             + tx.findall(".//to_account")
@@ -485,21 +542,17 @@ def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankP
             + tx.findall(".//account_my_client")
         )
         for acc in accounts:
+            ubo, known = _ubo_party_from_account_el(acc, ubos)
+            if not known:
+                if acc is not None and (iban := acc.findtext("iban")):
+                    unknown_accounts.add(iban)
+                continue
+            assert ubo is not None
             bank = acc.findtext("institution_name") or acc.findtext("swift")
-            for rel in acc.findall("related_persons/account_related_person"):
-                role_code = rel.findtext("role")
-                role = ACCOUNT_ROLE_MAP.get(role_code, role_code)
-                if role != "Beneficial owner":
-                    continue
-                person_el = rel.find("t_person")
-                if person_el is not None:
-                    party = _extract_party_from_person_el(person_el, bank=bank, role=role)
-                else:
-                    party = _extract_party_from_entity_el(rel.find("t_entity"), bank=bank, role=role)
-                key = (party.name, party.dob or "", party.role or "")
-                entry = mapping.setdefault(key, {"party": party, "banks": set()})
-                if bank:
-                    entry["banks"].add(bank)
+            key = (ubo.name, ubo.dob or "", ubo.address or "")
+            entry = mapping.setdefault(key, {"party": ubo, "banks": set()})
+            if bank:
+                entry["banks"].add(bank)
 
     results: List[MultiBankParty] = []
     for data in mapping.values():
@@ -508,7 +561,7 @@ def multibank_parties(transactions: Iterable[etree._Element]) -> List[MultiBankP
             results.append(
                 MultiBankParty(party=data["party"], banks=sorted(banks))
             )
-    return results
+    return results, len(unknown_accounts)
 
 
 def related_parties(transactions: Iterable[etree._Element], name: str, role: str) -> List[Party]:
@@ -521,7 +574,7 @@ def related_parties(transactions: Iterable[etree._Element], name: str, role: str
 
     results: Dict[str, Party] = {}
     for tx in transactions:
-        sender, receiver = _extract_parties(tx)
+        sender, receiver, _ = _extract_parties(tx)
         if role == "sending" and sender.name == name:
             results[receiver.name] = receiver
         elif role == "receiving" and receiver.name == name:
@@ -548,7 +601,7 @@ def party_transactions(
     target_name = f"{first_name} {last_name}".strip()
     for tx in transactions:
         labels = _parse_labels(tx)
-        sender, receiver = _extract_parties(tx)
+        sender, receiver, _ = _extract_parties(tx)
         amount = float(tx.findtext("amount_local") or 0)
         ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
         timestamp = datetime.fromisoformat(ts_str)
@@ -631,7 +684,7 @@ def labelled_transactions(transactions: Iterable[etree._Element], scope: str) ->
         if scope == "both" and not (local == 1 and global_ == 1):
             continue
 
-        sender, receiver = _extract_parties(tx)
+        sender, receiver, _ = _extract_parties(tx)
         amount = float(tx.findtext("amount_local") or 0)
         ts_str = tx.findtext("date_transaction") or "1970-01-01T00:00:00"
         timestamp = datetime.fromisoformat(ts_str)
@@ -648,6 +701,16 @@ def labelled_transactions(transactions: Iterable[etree._Element], scope: str) ->
         )
     results.sort(key=lambda r: r.timestamp)
     return results
+
+
+def count_unknown_ubos(transactions: Iterable[etree._Element]) -> int:
+    """Count accounts for which no UBO could be determined."""
+
+    unknown: set[str] = set()
+    for tx in transactions:
+        _, _, missing = _extract_parties(tx)
+        unknown.update(missing)
+    return len(unknown)
 
 
 def _print_table(rows: List[Dict[str, Any]]) -> None:
@@ -677,20 +740,22 @@ def _print_table(rows: List[Dict[str, Any]]) -> None:
 
 def _cmd_unique_parties(args: argparse.Namespace, role: str) -> None:
     txs = load_transactions()
+    stats, unknown = unique_parties(txs, role)
     rows = [
         {
-            "Name": stats.party.name,
-            "DOB": stats.party.dob or "",
-            "Bank": stats.party.bank or "",
-            "Address": stats.party.address or "",
-            "IBAN": stats.party.iban or "",
-            "Accounts": stats.account_count,
-            "Incoming Tx": stats.incoming,
-            "Outgoing Tx": stats.outgoing,
+            "Name": s.party.name,
+            "DOB": s.party.dob or "",
+            "Bank": s.party.bank or "",
+            "Address": s.party.address or "",
+            "IBAN": s.party.iban or "",
+            "Accounts": s.account_count,
+            "Incoming Tx": s.incoming,
+            "Outgoing Tx": s.outgoing,
         }
-        for stats in unique_parties(txs, role)
+        for s in stats
     ]
     _print_table(rows)
+    print(f"Accounts without UBO: {unknown}")
 
 
 def _cmd_related(args: argparse.Namespace, role: str) -> None:
@@ -708,6 +773,7 @@ def _cmd_related(args: argparse.Namespace, role: str) -> None:
         for p in related_parties(txs, args.name, role)
     ]
     _print_table(rows)
+    print(f"Accounts without UBO: {count_unknown_ubos(txs)}")
 
 
 def _cmd_transactions(args: argparse.Namespace) -> None:
@@ -744,6 +810,7 @@ def _cmd_transactions(args: argparse.Namespace) -> None:
         print(f"Final balance: {records[-1].running_balance:.2f}")
         print(f"Average tx amount: {mean(amounts):.2f}")
         print(f"Median tx amount: {median(amounts):.2f}")
+    print(f"Accounts without UBO: {count_unknown_ubos(txs)}")
 
 
 def _cmd_labels(args: argparse.Namespace) -> None:
@@ -762,11 +829,12 @@ def _cmd_labels(args: argparse.Namespace) -> None:
         for r in records
     ]
     _print_table(rows)
+    print(f"Accounts without UBO: {count_unknown_ubos(txs)}")
 
 
 def _cmd_multibank(args: argparse.Namespace) -> None:
     txs = load_transactions()
-    parties = multibank_parties(txs)
+    parties, unknown = multibank_parties(txs)
     rows = [
         {
             "Name": mb.party.name,
@@ -778,6 +846,7 @@ def _cmd_multibank(args: argparse.Namespace) -> None:
         for mb in parties
     ]
     _print_table(rows)
+    print(f"Accounts without UBO: {unknown}")
 
 
 def build_parser() -> argparse.ArgumentParser:

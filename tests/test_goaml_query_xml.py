@@ -72,10 +72,11 @@ def _transactions():
 
 def test_unique_parties_sender_receiver():
     txs = _transactions()
-    senders = unique_parties(txs, 'sending')
-    receivers = unique_parties(txs, 'receiving')
+    senders, u_s = unique_parties(txs, 'sending')
+    receivers, u_r = unique_parties(txs, 'receiving')
     assert {p.party.name for p in senders} == {'Alice Sender'}
     assert {p.party.name for p in receivers} == {'Bob Receiver'}
+    assert u_s == 0 and u_r == 0
     assert senders[0].incoming == 0 and senders[0].outgoing == 1
     assert receivers[0].incoming == 1 and receivers[0].outgoing == 0
     assert senders[0].account_count == 1
@@ -183,10 +184,11 @@ def _transactions_involved():
 
 def test_involved_parties_mapping():
     txs = _transactions_involved()
-    senders = unique_parties(txs, 'sending')
-    receivers = unique_parties(txs, 'receiving')
+    senders, u_s = unique_parties(txs, 'sending')
+    receivers, u_r = unique_parties(txs, 'receiving')
     assert {p.party.name for p in senders} == {'Alice Sender'}
     assert {p.party.name for p in receivers} == {'Bob Receiver'}
+    assert u_s == 0 and u_r == 0
     assert senders[0].incoming == 0 and senders[0].outgoing == 1
     assert receivers[0].incoming == 1 and receivers[0].outgoing == 0
     recs = related_parties(txs, 'Alice Sender', 'sending')
@@ -437,7 +439,7 @@ def _transactions_multi_account():
 
 def test_unique_parties_account_counts():
     txs = _transactions_multi_account()
-    senders = unique_parties(txs, 'sending')
+    senders, _ = unique_parties(txs, 'sending')
     alice = next(p for p in senders if p.party.name == 'Alice Sender')
     assert alice.account_count == 2
 
@@ -532,16 +534,58 @@ def _transactions_multibank():
 
 def test_multibank_parties():
     txs = _transactions_multibank()
-    parties = multibank_parties(txs)
+    parties, unknown = multibank_parties(txs)
     assert len(parties) == 1
     entry = parties[0]
     assert entry.party.name == 'Alice Smith'
     assert entry.party.role == 'Beneficial owner'
     assert set(entry.banks) == {'BankA', 'BankB'}
+    assert unknown == 1
 
 
-def test_unique_parties_only_ubo():
+def test_unique_senders_include_all():
     txs = _transactions_multibank()
-    senders = unique_parties(txs, 'sending')
-    assert {p.party.name for p in senders} == {'Alice Smith'}
-    assert all(p.party.role == 'Beneficial owner' for p in senders)
+    senders, unknown = unique_parties(txs, 'sending')
+    assert {p.party.name for p in senders} == {'Alice Smith', 'Charlie Nonubo'}
+    assert unknown == 1
+
+
+ENTITY_UBO_XML = '''
+<report>
+  <transaction>
+    <t_to_my_client>
+      <to_account>
+        <institution_name>BankX</institution_name>
+        <iban>IBAN_ENT</iban>
+        <related_entities>
+          <account_entity>
+            <relationship_role>BEOWN</relationship_role>
+            <t_entity>
+              <name>Acme Corp</name>
+              <incorporation_date>2001-01-01T00:00:00</incorporation_date>
+              <addresses>
+                <address>
+                  <address>Main St</address>
+                  <city>City</city>
+                  <country_code>CH</country_code>
+                </address>
+              </addresses>
+            </t_entity>
+          </account_entity>
+        </related_entities>
+      </to_account>
+    </t_to_my_client>
+    <amount_local>5</amount_local>
+    <date_transaction>2023-01-01T00:00:00</date_transaction>
+  </transaction>
+</report>
+'''
+
+
+def test_entity_ubo_detection():
+    root = etree.fromstring(ENTITY_UBO_XML)
+    txs = root.findall('transaction')
+    receivers, unknown = unique_parties(txs, 'receiving')
+    assert {p.party.name for p in receivers} == {'Acme Corp'}
+    assert receivers[0].party.role == 'Beneficial owner'
+    assert unknown == 0

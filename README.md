@@ -114,13 +114,14 @@ accounts. The ``transactions`` command reports both incoming and outgoing
 payments for the given party and displays transaction amount, account balance
 amount, running balance, and the local and global label flags for each record.
 After the table the command also prints the final balance along with the mean
- and median transaction amounts. The ``senders`` and ``receivers`` commands
- additionally show counts of incoming and outgoing transactions for each party
- and an ``Accounts`` column indicating how many distinct bank accounts are
- associated with each party. Only parties acting as ultimate beneficial owners
- (UBOs) are listed. The ``multi-bank`` command lists parties or entities that
- act as UBOs on accounts held at more than one bank, including their role and
- the banks where they appear.
+and median transaction amounts. The ``senders`` command lists all parties that
+initiate transactions. The ``receivers`` command lists only parties or entities
+that are determined to be ultimate beneficial owners (UBOs) of the receiving
+accounts. A UBO is resolved by first checking for an entity with relationship
+role ``BEOWN`` on the account and, if absent, falling back to any related person
+marked as a beneficial owner. The ``multi-bank`` command reports UBOs that hold
+accounts at more than one bank. Each query also reports how many accounts lacked
+sufficient information to determine a UBO.
 <details>
     <summary>💡Hint how to interpret the data:</summary>
 
