@@ -85,6 +85,7 @@ FUNDS_TYPE_MAP = {
     'cash': '26',
     'crypto': '2',
     'securities': '20',
+    'account': '14',
 }
 
 ACCOUNT_TYPE_MAP = {
@@ -271,7 +272,10 @@ def build_report(originator, day, transactions, currency_code_local, same_person
             etree.SubElement(t_from, 'from_country').text = from_country
 
             t_to = etree.SubElement(tx_el, 't_to_my_client')
-            etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['currency']
+            if tx_code == 'CASHT':
+                etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['account']
+            else:
+                etree.SubElement(t_to, 'to_funds_code').text = funds_code
             tfc = etree.SubElement(t_to, 'to_foreign_currency')
             etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
             etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
@@ -321,7 +325,10 @@ def build_report(originator, day, transactions, currency_code_local, same_person
             etree.SubElement(t_from, 'from_country').text = from_country
 
             t_to = etree.SubElement(tx_el, 't_to_my_client')
-            etree.SubElement(t_to, 'to_funds_code').text = funds_code
+            if tx_code == 'CASHT':
+                etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['account']
+            else:
+                etree.SubElement(t_to, 'to_funds_code').text = funds_code
             tfc = etree.SubElement(t_to, 'to_foreign_currency')
             etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
             etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"

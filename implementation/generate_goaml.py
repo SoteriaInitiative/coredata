@@ -25,6 +25,7 @@ TYPE_MAP = {
 FUNDS_TYPE_MAP = {
     'cash': '26',
     'currency': '27',
+    'account': '14',
 }
 
 ACCOUNT_TYPE_MAP = {
@@ -119,7 +120,7 @@ def _build_account(parent, account, currency_code_local, day, tag):
         etree.SubElement(are_bo, 'account_entity_relation').text = 'BEOWN'
         ent_bo = etree.SubElement(are_bo, 'entity')
         _build_entity(ent_bo, account.get('name', 'Unknown'), account.get('legal_form', 'AG'), addr)
-        entity_persons = etree.SubElement(ent_bo, 'entity_persons')
+        entity_persons = etree.SubElement(are_bo, 'entity_persons')
         ep = etree.SubElement(entity_persons, 'entity_person')
         tp_ep = etree.SubElement(ep, 't_person')
         _build_person(
@@ -231,7 +232,7 @@ def build_report(bank_id, originator, day, transactions, currency_code_local):
         etree.SubElement(t_from, 'from_country').text = origin.get('address', {}).get('country_code', 'CH')
 
         t_to = etree.SubElement(tx_el, 't_to_my_client')
-        etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['currency']
+        etree.SubElement(t_to, 'to_funds_code').text = FUNDS_TYPE_MAP['account']
         tfc = etree.SubElement(t_to, 'to_foreign_currency')
         etree.SubElement(tfc, 'foreign_currency_code').text = tdata.get('currency_code', currency_code_local)
         etree.SubElement(tfc, 'foreign_amount').text = f"{tdata.get('currency_amount', 0):.2f}"
