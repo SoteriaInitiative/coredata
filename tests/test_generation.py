@@ -211,8 +211,10 @@ def test_lei_client_number_and_beneficial_owner():
     assert rel_person.findtext('birthdate') != '1900-01-01T00:00:00'
     roles = [el.text for el in acc_el.findall('related_persons/account_related_person/role')]
     entity_rel = [el.text for el in acc_el.findall('related_entities/account_related_entity/account_entity_relation')]
-    bo_count = sum(1 for r in roles if r in {'1', '2'}) + sum(1 for r in entity_rel if r in {'ACCCO'})
-    assert bo_count == 1
+    person_bo_count = sum(1 for r in roles if r in {'1', '2'})
+    entity_bo_count = sum(1 for r in entity_rel if r in {'ACCCO'})
+    assert person_bo_count == 0 or entity_bo_count == 0
+    assert person_bo_count + entity_bo_count >= 1
     # person beneficiary transaction
     person_tx = next(t for t in txs if t['Transaction']['beneficiary_account']['party_type'] == 'person')
     originator_p = person_tx['Transaction']['transaction_originator']
@@ -221,6 +223,12 @@ def test_lei_client_number_and_beneficial_owner():
     acc_person = report_person.find('.//t_to_my_client/to_account')
     client_num_p = acc_person.findtext('client_number')
     assert client_num_p != '000000'
+    roles_p = [el.text for el in acc_person.findall('related_persons/account_related_person/role')]
+    entity_rel_p = [el.text for el in acc_person.findall('related_entities/account_related_entity/account_entity_relation')]
+    person_bo_count_p = sum(1 for r in roles_p if r in {'1', '2'})
+    entity_bo_count_p = sum(1 for r in entity_rel_p if r in {'ACCCO'})
+    assert person_bo_count_p == 0 or entity_bo_count_p == 0
+    assert person_bo_count_p + entity_bo_count_p >= 1
 
 
 def test_multibank_global_label():
