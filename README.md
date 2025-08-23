@@ -138,6 +138,15 @@ This release includes the following key features:
 - Reports use STR code and include standard indicators 1131V and 2003G
 - Export utility validates XML against the goAML XSD and can upload reports to Cloud Storage
 
+## goAML Export Usage
+Generate synthetic reports directly in goAML XML by running:
+
+```bash
+python implementation/go_aml_export.py --input example/Bank_1_transactions.json
+```
+
+The script groups transactions by originator and UTC day, recalculates account balances, validates against the XSD, and optionally uploads to the configured Cloud Storage bucket.
+
 # ⚠️ Limitations:
 Please consider the following limitations or known issues:
 - The implementation is not yet fully covering full standard draft prioritizing federated learning features first
