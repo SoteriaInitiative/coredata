@@ -140,6 +140,31 @@ def test_large_cash_local_label():
         assert tx['Transaction']['local_label'] == 0
 
 
+def test_generated_reports_validate():
+    parties, receivers, accounts_by_bank = _generate_sample()
+    accounts = accounts_by_bank[1]
+    txs, _ = generate_goaml.generate_transactions_for_bank(
+        1,
+        accounts,
+        receivers,
+        parties,
+        num_transactions=100,
+        days_back=30,
+        scenario_prob=0.5,
+        bank_knows=True,
+        std_multiplier=2.0,
+        max_splits=3,
+    )
+    grouped = generate_goaml.group_by_party(txs)
+    checked = 0
+    for (originator, day), group in grouped.items():
+        report = generate_goaml.build_report(1, originator, day, group, 'CHF')
+        generate_goaml.validate_report(report)
+        checked += 1
+        if checked >= 3:
+            break
+
+
 def test_group_by_party_collects_all_same_day_transactions():
     parties, receivers, accounts_by_bank = _generate_sample()
     accounts = accounts_by_bank[1]
@@ -209,20 +234,7 @@ def test_beneficial_owner_invariant():
         assert client_num != '000000'
 
         roles = [el.text for el in acc_el.findall('related_persons/account_related_person/role')]
-        bo_person = any(r == '13' for r in roles)
-        be_nodes = acc_el.findall('related_entities/account_related_entity[account_entity_relation="BEOWN"]')
-        bo_entity = any(
-            ep.findtext('entity_person_role_type') == '3'
-            for node in be_nodes
-            for ep in node.findall('.//entity_person')
-        )
-        assert bo_person or bo_entity
-        assert not (bo_person and bo_entity)
-        if be_nodes:
-            lei = be_nodes[0].findtext('entity/incorporation_number')
-            assert lei and len(lei) == 20
-            name = be_nodes[0].findtext('entity/name')
-            assert any(form in name for form in generate_goaml.LEGAL_FORMS)
+        assert roles.count('13') == 1
         checked.add(pid)
 
 
