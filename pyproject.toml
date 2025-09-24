@@ -41,6 +41,3 @@ include = ["soteria*"]
 # Include schema files under the package
 "soteria.coredata" = ["*.xsd", "standard/*.xsd"]
 
-[tool.setuptools.data-files]
-# Ensure the schema gets installed alongside the package when kept at project src root
-"soteria/coredata" = ["src/XML_Schema.xsd"]
