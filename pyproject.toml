@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soteria-coredata"
+version = "0.1.0"
+description = "CoreData tools for generating and querying goAML-style data"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Soteria Initiative" }]
+license = { file = "LICENSE" }
+dependencies = [
+  "google-cloud-storage",
+  "numpy",
+  "python-dotenv",
+  "requests",
+  "lxml",
+  "xmlschema",
+  "faker",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
+
+[project.scripts]
+coredata-generate-goaml = "soteria.coredata.generate_goaml:main"
+coredata-export-goaml = "soteria.coredata.go_aml_export:export_to_goaml"
+coredata-query = "soteria.coredata.goaml_query:main"
+coredata-generate = "soteria.coredata.generator:main"
+
+[tool.setuptools]
+include-package-data = true
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["soteria*"]
+
+[tool.setuptools.package-data]
+# Include schema files under the package
+"soteria.coredata" = ["*.xsd", "standard/*.xsd"]
+
+[tool.setuptools.data-files]
+# Ensure the schema gets installed alongside the package when kept at project src root
+"soteria/coredata" = ["src/XML_Schema.xsd"]
