@@ -1,6 +1,10 @@
+import os
+import sys
 from lxml import etree
 from statistics import mean, median
-from tools.goaml_query import (
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata.goaml_query import (
     unique_parties,
     related_parties,
     party_transactions,

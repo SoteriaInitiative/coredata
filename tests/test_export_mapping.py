@@ -3,8 +3,8 @@ import os
 import sys
 from datetime import datetime
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from implementation import generate_goaml, go_aml_export
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata import generate_goaml, go_aml_export
 
 
 def setup_module(module):

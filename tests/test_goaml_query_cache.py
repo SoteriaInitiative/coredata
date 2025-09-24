@@ -1,5 +1,9 @@
 from datetime import datetime
-from tools.goaml_query import load_transactions
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata.goaml_query import load_transactions
 
 SAMPLE_XML = """
 <report>
@@ -30,7 +34,7 @@ def test_load_transactions_uses_cache(monkeypatch, tmp_path):
             return Bucket()
 
     monkeypatch.setenv("GOAML_CACHE_DIR", str(tmp_path))
-    monkeypatch.setattr("tools.goaml_query._get_storage_client", lambda: Client())
+    monkeypatch.setattr("soteria.coredata.goaml_query._get_storage_client", lambda: Client())
 
     # First call downloads the XML
     txs = load_transactions(prefix="folder")

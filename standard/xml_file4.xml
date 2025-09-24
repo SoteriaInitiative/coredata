@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <report>
-  <rentity_id>1</rentity_id>
-  <rentity_branch>Main Branch</rentity_branch>
-  <submission_code>E</submission_code>
-  <report_code>SAR</report_code>
-  <entity_reference>REF-001</entity_reference>
-  <fiu_ref_number>FIU-2024-001</fiu_ref_number>
-  <report_date>2025-07-16T17:01:14</report_date>
-  <currency_code_local>CHF</currency_code_local>
-  <reporting_person>
+    <rentity_id>1</rentity_id>
+    <rentity_branch>Main Branch</rentity_branch>
+    <submission_code>E</submission_code>
+    <report_code>SAR</report_code>
+    <entity_reference>REF-001</entity_reference>
+    <fiu_ref_number>FIU-2024-001</fiu_ref_number>
+    <report_date>2025-07-16T17:01:14</report_date>
+    <currency_code_local>CHF</currency_code_local>
+    <reporting_person>
         <gender>M</gender>
 
         <first_name>John</first_name>
@@ -17,146 +17,182 @@
         <last_name>Doe</last_name>
 
 
-
-
-
-
-
-
-
         <nationality1>CH</nationality1>
 
 
-
-
-        <phones><phone><tph_contact_type>3</tph_contact_type><tph_communication_type>1</tph_communication_type><tph_country_prefix>41</tph_country_prefix><tph_number>445551234</tph_number></phone></phones>
-        <addresses><address><address_type>1</address_type><address>Bahnhofstrasse 1</address><city>Zurich</city><zip>8001</zip><country_code>CH</country_code><state>ZH</state></address></addresses>
-
-
-
-
-
-
-
-
-
-
-
-
-      </reporting_person>
-  <location>
-    <address_type>1</address_type>
-    <address>Bahnhofstrasse 1</address>
-    <city>Zurich</city>
-    <zip>8001</zip>
-    <country_code>CH</country_code>
-    <state>ZH</state>
-  </location>
-  <reason>Unusual transaction pattern detected</reason>
-  <action>Transaction reported to authorities</action>
-
-  <transaction>
-    <transactionnumber>TXN-001</transactionnumber>
-    <internal_ref_number>REF-2024-001</internal_ref_number>
-    <agent_name>John Agent</agent_name>
-    <transaction_location>Zurich Branch</transaction_location>
-    <transaction_description>Cash deposit</transaction_description>
-    <date_transaction>2025-07-16T17:01:35</date_transaction>
-    <teller>TELLER-001</teller>
-    <value_date>2025-07-16T17:01:35</value_date>
-    <transaction_type_code>CASHT</transaction_type_code>
-    <amount_local>0</amount_local>
-    <involved_parties><party><role>1</role><person>
-        <gender>M</gender>
-
-        <first_name>Bob</first_name>
-
-
-        <last_name>Broker</last_name>
-
-
-
-
-
-
-
-
-
-        <nationality1>CH</nationality1>
-
-
-
-
-
-        <addresses><address><address_type>1</address_type><address>Broker Street 1</address><city>Basel</city><zip>4000</zip><country_code>CH</country_code><state>BS</state></address></addresses>
-
-
-
-
-
-
-
-
-
-
-
-
-      </person><comments>Acted as intermediary</comments></party></involved_parties>
-    <goods_services><item><item_type>9</item_type><item_make>Professional Services</item_make><description>Financial Advisory Services</description><presently_registered_to>Current Service Provider</presently_registered_to><estimated_value>10000</estimated_value><disposed_value>8000</disposed_value><currency_code>CHF</currency_code><comments>Professional services with default values populated</comments></item><item><item_type>8</item_type><item_make>Sample Brand</item_make><description>Sample item description</description><presently_registered_to>Current Owner</presently_registered_to><estimated_value>1000</estimated_value><disposed_value>1000</disposed_value><currency_code>CHF</currency_code><comments>Item details</comments></item></goods_services>
-    <comments>Suspicious transaction requiring further investigation</comments>
-  </transaction>
-  <transaction>
-    <transactionnumber>TXN-001</transactionnumber>
-    <internal_ref_number>REF-2024-001</internal_ref_number>
-    <agent_name>John Agent</agent_name>
-    <transaction_location>Zurich Branch</transaction_location>
-    <transaction_description>Cash deposit</transaction_description>
-    <date_transaction>2025-07-16T17:06:18</date_transaction>
-    <teller>TELLER-001</teller>
-    <value_date>2025-07-16T17:06:18</value_date>
-    <transaction_type_code>CASHT</transaction_type_code>
-    <amount_local>0</amount_local>
-    <involved_parties><party><role>1</role><person>
-        <gender>M</gender>
-
-        <first_name>Bob</first_name>
-
-
-        <last_name>Broker</last_name>
-
-
-
-
-
-
-
-
-
-        <nationality1>CH</nationality1>
-
-
-
-
-
-        <addresses><address><address_type>1</address_type><address>Broker Street 1</address><city>Basel</city><zip>4000</zip><country_code>CH</country_code><state>BS</state></address></addresses>
-
-
-
-
-
-
-
-
-
-
-
-
-      </person><comments>Acted as intermediary</comments></party></involved_parties>
-    <goods_services><item><item_type>9</item_type><item_make>Professional Services</item_make><description>Financial Advisory Services</description><presently_registered_to>Current Service Provider</presently_registered_to><estimated_value>10000</estimated_value><disposed_value>8000</disposed_value><currency_code>CHF</currency_code><comments>Professional services with default values populated</comments></item><item><item_type>8</item_type><item_make>Sample Brandy</item_make><description>Sample item description</description><presently_registered_to>Current Owner</presently_registered_to><estimated_value>1000</estimated_value><disposed_value>1000</disposed_value><currency_code>CHF</currency_code><comments>Item details</comments></item></goods_services>
-    <comments>Suspicious transaction requiring further investigation</comments>
-  </transaction>
-  <report_indicators>
-    <indicator>0024M</indicator><indicator>1207V</indicator><indicator>2103G</indicator>
-  </report_indicators>
-  <additional_information><additional_info><info_type>BRNR</info_type><info_numeric>1</info_numeric></additional_info></additional_information>
+        <phones>
+            <phone>
+                <tph_contact_type>3</tph_contact_type>
+                <tph_communication_type>1</tph_communication_type>
+                <tph_country_prefix>41</tph_country_prefix>
+                <tph_number>445551234</tph_number>
+            </phone>
+        </phones>
+        <addresses>
+            <address>
+                <address_type>1</address_type>
+                <address>Bahnhofstrasse 1</address>
+                <city>Zurich</city>
+                <zip>8001</zip>
+                <country_code>CH</country_code>
+                <state>ZH</state>
+            </address>
+        </addresses>
+
+
+    </reporting_person>
+    <location>
+        <address_type>1</address_type>
+        <address>Bahnhofstrasse 1</address>
+        <city>Zurich</city>
+        <zip>8001</zip>
+        <country_code>CH</country_code>
+        <state>ZH</state>
+    </location>
+    <reason>Unusual transaction pattern detected</reason>
+    <action>Transaction reported to authorities</action>
+
+    <transaction>
+        <transactionnumber>TXN-001</transactionnumber>
+        <internal_ref_number>REF-2024-001</internal_ref_number>
+        <agent_name>John Agent</agent_name>
+        <transaction_location>Zurich Branch</transaction_location>
+        <transaction_description>Cash deposit</transaction_description>
+        <date_transaction>2025-07-16T17:01:35</date_transaction>
+        <teller>TELLER-001</teller>
+        <value_date>2025-07-16T17:01:35</value_date>
+        <transaction_type_code>CASHT</transaction_type_code>
+        <amount_local>0</amount_local>
+        <involved_parties>
+            <party>
+                <role>1</role>
+                <person>
+                    <gender>M</gender>
+
+                    <first_name>Bob</first_name>
+
+
+                    <last_name>Broker</last_name>
+
+
+                    <nationality1>CH</nationality1>
+
+
+                    <addresses>
+                        <address>
+                            <address_type>1</address_type>
+                            <address>Broker Street 1</address>
+                            <city>Basel</city>
+                            <zip>4000</zip>
+                            <country_code>CH</country_code>
+                            <state>BS</state>
+                        </address>
+                    </addresses>
+
+
+                </person>
+                <comments>Acted as intermediary</comments>
+            </party>
+        </involved_parties>
+        <goods_services>
+            <item>
+                <item_type>9</item_type>
+                <item_make>Professional Services</item_make>
+                <description>Financial Advisory Services</description>
+                <presently_registered_to>Current Service Provider</presently_registered_to>
+                <estimated_value>10000</estimated_value>
+                <disposed_value>8000</disposed_value>
+                <currency_code>CHF</currency_code>
+                <comments>Professional services with default values populated</comments>
+            </item>
+            <item>
+                <item_type>8</item_type>
+                <item_make>Sample Brand</item_make>
+                <description>Sample item description</description>
+                <presently_registered_to>Current Owner</presently_registered_to>
+                <estimated_value>1000</estimated_value>
+                <disposed_value>1000</disposed_value>
+                <currency_code>CHF</currency_code>
+                <comments>Item details</comments>
+            </item>
+        </goods_services>
+        <comments>Suspicious transaction requiring further investigation</comments>
+    </transaction>
+    <transaction>
+        <transactionnumber>TXN-001</transactionnumber>
+        <internal_ref_number>REF-2024-001</internal_ref_number>
+        <agent_name>John Agent</agent_name>
+        <transaction_location>Zurich Branch</transaction_location>
+        <transaction_description>Cash deposit</transaction_description>
+        <date_transaction>2025-07-16T17:06:18</date_transaction>
+        <teller>TELLER-001</teller>
+        <value_date>2025-07-16T17:06:18</value_date>
+        <transaction_type_code>CASHT</transaction_type_code>
+        <amount_local>0</amount_local>
+        <involved_parties>
+            <party>
+                <role>1</role>
+                <person>
+                    <gender>M</gender>
+
+                    <first_name>Bob</first_name>
+
+
+                    <last_name>Broker</last_name>
+
+
+                    <nationality1>CH</nationality1>
+
+
+                    <addresses>
+                        <address>
+                            <address_type>1</address_type>
+                            <address>Broker Street 1</address>
+                            <city>Basel</city>
+                            <zip>4000</zip>
+                            <country_code>CH</country_code>
+                            <state>BS</state>
+                        </address>
+                    </addresses>
+
+
+                </person>
+                <comments>Acted as intermediary</comments>
+            </party>
+        </involved_parties>
+        <goods_services>
+            <item>
+                <item_type>9</item_type>
+                <item_make>Professional Services</item_make>
+                <description>Financial Advisory Services</description>
+                <presently_registered_to>Current Service Provider</presently_registered_to>
+                <estimated_value>10000</estimated_value>
+                <disposed_value>8000</disposed_value>
+                <currency_code>CHF</currency_code>
+                <comments>Professional services with default values populated</comments>
+            </item>
+            <item>
+                <item_type>8</item_type>
+                <item_make>Sample Brandy</item_make>
+                <description>Sample item description</description>
+                <presently_registered_to>Current Owner</presently_registered_to>
+                <estimated_value>1000</estimated_value>
+                <disposed_value>1000</disposed_value>
+                <currency_code>CHF</currency_code>
+                <comments>Item details</comments>
+            </item>
+        </goods_services>
+        <comments>Suspicious transaction requiring further investigation</comments>
+    </transaction>
+    <report_indicators>
+        <indicator>0024M</indicator>
+        <indicator>1207V</indicator>
+        <indicator>2103G</indicator>
+    </report_indicators>
+    <additional_information>
+        <additional_info>
+            <info_type>BRNR</info_type>
+            <info_numeric>1</info_numeric>
+        </additional_info>
+    </additional_information>
 </report>

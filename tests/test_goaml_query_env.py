@@ -1,6 +1,9 @@
+import os
+import sys
 import pytest
 
-from tools.goaml_query import build_parser, _get_storage_client
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata.goaml_query import build_parser, _get_storage_client
 
 
 def test_env_defaults_receivers_for(monkeypatch):
@@ -44,9 +47,9 @@ def test_env_service_account(monkeypatch):
         called["info"] = info
         return dummy_creds
 
-    monkeypatch.setattr("tools.goaml_query.storage.Client", fake_client)
+    monkeypatch.setattr("soteria.coredata.goaml_query.storage.Client", fake_client)
     monkeypatch.setattr(
-        "tools.goaml_query.service_account.Credentials.from_service_account_info",
+        "soteria.coredata.goaml_query.service_account.Credentials.from_service_account_info",
         fake_from_info,
     )
 

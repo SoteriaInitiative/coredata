@@ -1,8 +1,10 @@
 import copy
 from datetime import datetime
+import os
+import sys
 
-
-from implementation import go_aml_export, generate_goaml
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata import go_aml_export, generate_goaml
 
 
 def _base_transaction():
@@ -75,4 +77,3 @@ def test_same_person_probability_enforced():
         './/transaction/t_to_my_client/to_account/related_persons/account_related_person/t_person/first_name'
     ).text
     assert from_name_diff != to_name_diff
-

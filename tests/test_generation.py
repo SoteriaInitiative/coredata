@@ -5,8 +5,8 @@ from collections import defaultdict
 from datetime import datetime
 from lxml import etree
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from implementation import generate_goaml
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata import generate_goaml
 
 
 def setup_module(module):

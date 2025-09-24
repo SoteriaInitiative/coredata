@@ -3,8 +3,8 @@ import sys
 from datetime import datetime
 from collections import defaultdict
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from implementation import go_aml_export
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+from soteria.coredata import go_aml_export
 
 
 def test_group_by_party_collects_all_same_day_transactions():

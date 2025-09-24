@@ -91,7 +91,7 @@ gcloud storage buckets create gs://soteria-core-data \
 ```
 5. Run synthetic data generator:
 ```zsh
-python implementation/generator.py
+python src/generator.py
 ```
 To review the raw data for ``Bank_1`` on a terminal run:
 ```zsh
@@ -116,11 +116,11 @@ cat Bank_1_transactions.json | jq . | more
    Example usage:
 
 ```zsh
-python tools/goaml_query.py receivers
-python tools/goaml_query.py labels --local 1 --global 1
-python tools/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
-python tools/goaml_query.py multi-bank
-python tools/goaml_query.py missing-ubos
+python src/goaml_query.py receivers
+python src/goaml_query.py labels --local 1 --global 1
+python src/goaml_query.py transactions "Jessica" "Hale" "1948-11-07T00:00:00" --bank "CH National"
+python src/goaml_query.py multi-bank
+python src/goaml_query.py missing-ubos
 ```
 Downloaded XML files are cached under ``.goaml_cache`` (override with
 ``GOAML_CACHE_DIR``) to avoid repeat downloads between runs. The tool resolves
@@ -188,7 +188,7 @@ This release includes the following key features:
 Generate synthetic reports directly in goAML XML by running:
 
 ```bash
-python implementation/go_aml_export.py --input example/Bank_1_transactions.json
+python src/go_aml_export.py --input example/Bank_1_transactions.json
 ```
 
 The script groups transactions by originator and UTC day, recalculates account balances, validates against the XSD, and optionally uploads to the configured Cloud Storage bucket.
@@ -197,7 +197,7 @@ The script groups transactions by originator and UTC day, recalculates account b
 Produce synthetic transactions and STR reports directly:
 
 ```bash
-python implementation/generate_goaml.py --banks 3 --transactions 1000 --days 90 \
+python src/generate_goaml.py --banks 3 --transactions 1000 --days 90 \
   --scenario_probability '{"1":0.2,"2":0.1,"3":0.1}' \
   --bank_knowledge '{"1":true,"2":false,"3":false}' \
   --same_person_prob 0.9
